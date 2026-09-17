@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Streamer Tweaks</title>
+</head> 
+<body>
+    <h1>Processing...</h1>
+    <script>
+        (function() {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const token = params.get('access_token');
+            const scope = params.get('scope');
+            const state = params.get('state');
+
+            // Post the token and state to the server
+            fetch('/callback/consume', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    access_token: token,
+                    scope: scope,
+                    state: state
+                })
+            })
+            .then(response => response.text())
+            .then(html => {
+                document.open();
+                document.write(html);
+                document.close();
+            })
+            .catch(error => {
+                document.body.innerHTML = '<h1>Error processing authentication. Please try again.</h1>';
+                console.error('Error:', error);
+            });
+        })();
+    </script>
+</body>
+</html>

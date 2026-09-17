@@ -1,0 +1,474 @@
+name: Release
+run-name: Release ${{ inputs.channel || 'manual' }} for ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'リリースチャンネル'
+        type: choice
+        required: true
+        options:
+          - alpha
+          - beta
+          - release
+      loaders:
+        description: '公開するローダー（channel=release では both のみ）'
+        type: choice
+        required: true
+        default: both
+        options:
+          - both
+          - fabric
+          - neoforge
+
+concurrency:
+  # publish 途中のキャンセルによる中途半端なリリースを防ぐため cancel-in-progress は付けない
+  group: release-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      # タグ push と GitHub Release 作成のために必要
+      contents: write
+    outputs:
+      tag: ${{ steps.compute.outputs.tag }}
+      channel: ${{ steps.compute.outputs.channel }}
+      mc: ${{ steps.compute.outputs.mc }}
+      loaders: ${{ steps.compute.outputs.loaders }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - id: setup-build
+        uses: ./.github/actions/setup-build
+
+      # ------------------------------------------------------------------
+      # 1. バージョン / タグ採番（この時点ではタグを push しない）
+      # ------------------------------------------------------------------
+      - id: compute
+        name: Compute release metadata
+        shell: bash
+        env:
+          CHANNEL_INPUT: ${{ inputs.channel }}
+          LOADERS_INPUT: ${{ inputs.loaders }}
+        run: |
+          set -euo pipefail
+
+          # --- 入力の allowlist 検証（type: choice に加えた多層防御）---
+          case "$CHANNEL_INPUT" in
+            alpha|beta|release) CHANNEL="$CHANNEL_INPUT" ;;
+            *) echo "channel の値が不正です"; exit 1 ;;
+          esac
+
+          case "$LOADERS_INPUT" in
+            both|fabric|neoforge) LOADERS="$LOADERS_INPUT" ;;
+            *) echo "loaders の値が不正です"; exit 1 ;;
+          esac
+
+          # release のタグは v<mod_version>+mc<mc> 固定なので、片方だけ公開すると
+          # もう片方を公開する2回目の実行で必ずタグが衝突する。
+          if [[ "$CHANNEL" == "release" && "$LOADERS" != "both" ]]; then
+            echo "channel=release では loaders=both のみ指定できます（タグが1系列固定のため）"
+            exit 1
+          fi
+
+          case "$LOADERS" in
+            both) LOADER_LIST="fabric,neoforge" ;;
+            *) LOADER_LIST="$LOADERS" ;;
+          esac
+
+          escape_regex() {
+            printf '%s' "$1" | sed -e 's/[.[\*^$()+?{|]/\\&/g'
+          }
+
+          # --- gradle.properties からバージョンを取得し、形式を厳密に検証する ---
+          MOD_VERSION="$(sed -nE 's/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' gradle.properties | head -n1)"
+          MC_VERSION="$(sed -nE 's/^[[:space:]]*minecraft_version[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' gradle.properties | head -n1)"
+
+          if ! [[ "$MOD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "gradle.properties の mod_version が不正です (取得値: '${MOD_VERSION}')"
+            exit 1
+          fi
+          if ! [[ "$MC_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "gradle.properties の minecraft_version が不正です (取得値: '${MC_VERSION}')"
+            exit 1
+          fi
+
+          # --- 実行ブランチがバージョンブランチであることを確認 ---
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          if ! [[ "$BRANCH" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "このワークフローはバージョンブランチ（例: 1.21.8, 26.2）上で実行してください。現在のブランチ: $BRANCH"
+            exit 1
+          fi
+          if [[ "$BRANCH" != "$MC_VERSION" ]]; then
+            echo "ブランチ名($BRANCH)と gradle.properties の minecraft_version($MC_VERSION) が一致しません"
+            exit 1
+          fi
+
+          MOD_VERSION_RE="$(escape_regex "$MOD_VERSION")"
+          MC_VERSION_RE="$(escape_regex "$MC_VERSION")"
+
+          # --- ローダー別に「そのローダーを公開した直近の到達可能タグ」を探す ---
+          # annotated tag のメッセージ2行目 'Loaders: fabric,neoforge' を厳格な正規表現で読む。
+          # マッチしないタグ（既存の lightweight タグなど）は「不明」= 両ローダー公開済みとみなす。
+          prev_tag_for_loader() {
+            local target="$1" tag loader_line
+            while IFS= read -r tag; do
+              loader_line="$(git tag -l --format='%(contents)' "$tag" \
+                | sed -nE 's/^Loaders: ((fabric|neoforge)(,(fabric|neoforge))*)$/\1/p' | head -n1)"
+              if [[ -z "$loader_line" || ",${loader_line}," == *",${target},"* ]]; then
+                printf '%s' "$tag"
+                return
+              fi
+            done < <(git tag --merged HEAD --sort=-creatordate --list "v*+mc${MC_VERSION}")
+          }
+
+          # 2つのタグのうち作成日時が古い方を返す（どちらかが空なら空 = Unreleased 全文）
+          older_tag() {
+            if [[ -z "$1" || -z "$2" ]]; then
+              return
+            fi
+            if [[ "$1" == "$2" ]]; then
+              printf '%s' "$1"
+              return
+            fi
+            git tag --sort=creatordate --list "$1" "$2" | head -n1
+          }
+
+          validate_tag_ref() {
+            if [[ -n "$1" && ! "$1" =~ ^v[0-9A-Za-z.+_,-]+$ ]]; then
+              echo "$2 として不正なタグ名を検出しました: '$1'"
+              exit 1
+            fi
+          }
+
+          PREV_TAG_FABRIC=""
+          PREV_TAG_NEOFORGE=""
+          PREV_TAG_COMBINED=""
+
+          if [[ "$CHANNEL" == "release" ]]; then
+            VERSION="$MOD_VERSION"
+            NEW_TAG="v${MOD_VERSION}+mc${MC_VERSION}"
+
+            if ! grep -qE "^## \[${MOD_VERSION_RE}\]" CHANGELOG.md; then
+              echo "CHANGELOG.md に '## [${MOD_VERSION}]' セクションが見つかりません。"
+              echo "先に release/${MOD_VERSION} ブランチで CHANGELOG.md を更新する PR をマージしてください。"
+              exit 1
+            fi
+          else
+            # 同じ mod_version + channel の中で連番を採番する（fabric/neoforge 共通の1系列）
+            LAST_NUM="$(git tag -l "v${MOD_VERSION}-${CHANNEL}.*+mc${MC_VERSION}" \
+              | sed -nE "s/^v${MOD_VERSION_RE}-${CHANNEL}\.([0-9]+)\+mc${MC_VERSION_RE}\$/\1/p" \
+              | sort -n | tail -n1)"
+            NEXT_NUM=$(( ${LAST_NUM:-0} + 1 ))
+            VERSION="${MOD_VERSION}-${CHANNEL}.${NEXT_NUM}"
+            NEW_TAG="v${VERSION}+mc${MC_VERSION}"
+
+            # リリースノートをローダーごとの前回タグからの差分にする
+            PREV_TAG_FABRIC="$(prev_tag_for_loader fabric)"
+            PREV_TAG_NEOFORGE="$(prev_tag_for_loader neoforge)"
+            case "$LOADERS" in
+              fabric) PREV_TAG_COMBINED="$PREV_TAG_FABRIC" ;;
+              neoforge) PREV_TAG_COMBINED="$PREV_TAG_NEOFORGE" ;;
+              # まとめノートは取りこぼしを防ぐため古い方の差分を使う
+              both) PREV_TAG_COMBINED="$(older_tag "$PREV_TAG_FABRIC" "$PREV_TAG_NEOFORGE")" ;;
+            esac
+          fi
+
+          validate_tag_ref "$PREV_TAG_FABRIC" "fabric の前回タグ"
+          validate_tag_ref "$PREV_TAG_NEOFORGE" "neoforge の前回タグ"
+          validate_tag_ref "$PREV_TAG_COMBINED" "まとめノート用の前回タグ"
+          validate_tag_ref "$NEW_TAG" "新規タグ"
+
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "タグ $NEW_TAG は既に存在します"
+            exit 1
+          fi
+
+          FABRIC_JAR="fabric/build/libs/stream-tweaks-fabric-mc${MC_VERSION}-${VERSION}.jar"
+          NEOFORGE_JAR="neoforge/build/libs/stream-tweaks-neoforge-mc${MC_VERSION}-${VERSION}.jar"
+
+          RELEASE_FILES=""
+          if [[ "$LOADERS" == "both" || "$LOADERS" == "fabric" ]]; then
+            RELEASE_FILES="${RELEASE_FILES}${FABRIC_JAR}"$'\n'
+          fi
+          if [[ "$LOADERS" == "both" || "$LOADERS" == "neoforge" ]]; then
+            RELEASE_FILES="${RELEASE_FILES}${NEOFORGE_JAR}"$'\n'
+          fi
+
+          {
+            echo "tag=$NEW_TAG"
+            echo "version=$VERSION"
+            echo "mc=$MC_VERSION"
+            echo "channel=$CHANNEL"
+            echo "loaders=$LOADERS"
+            echo "loader_list=$LOADER_LIST"
+            echo "prev_tag_fabric=$PREV_TAG_FABRIC"
+            echo "prev_tag_neoforge=$PREV_TAG_NEOFORGE"
+            echo "prev_tag_combined=$PREV_TAG_COMBINED"
+            echo "fabric_jar=$FABRIC_JAR"
+            echo "neoforge_jar=$NEOFORGE_JAR"
+          } >> "$GITHUB_OUTPUT"
+
+          DELIM="STREAM_TWEAKS_$(openssl rand -hex 16)"
+          {
+            echo "release_files<<$DELIM"
+            printf '%s' "$RELEASE_FILES"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 作成するタグ: \`$NEW_TAG\`"
+            echo "### 公開 loader: \`$LOADER_LIST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ------------------------------------------------------------------
+      # 2. リリースノート生成（ローダー別 + まとめ）
+      # ------------------------------------------------------------------
+      - id: changelog
+        name: Prepare changelog notes
+        shell: bash
+        env:
+          MODE: ${{ steps.compute.outputs.channel }}
+          VERSION: ${{ steps.compute.outputs.version }}
+          LOADERS: ${{ steps.compute.outputs.loaders }}
+          LOADER_LIST: ${{ steps.compute.outputs.loader_list }}
+          PREV_TAG_FABRIC: ${{ steps.compute.outputs.prev_tag_fabric }}
+          PREV_TAG_NEOFORGE: ${{ steps.compute.outputs.prev_tag_neoforge }}
+          PREV_TAG_COMBINED: ${{ steps.compute.outputs.prev_tag_combined }}
+          NOTES_DIR: ${{ runner.temp }}/release-notes
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$NOTES_DIR"
+
+          # $1: 出力ファイル / $2: --loaders の値 / $3: 差分の起点タグ（空可）
+          generate_notes() {
+            local out="$1" loaders_arg="$2" prev_tag="$3"
+            local since_args=()
+
+            if [[ "$MODE" == "release" ]]; then
+              python3 scripts/changelog_tool.py read \
+                --file CHANGELOG.md \
+                --version "$VERSION" \
+                --loaders "$loaders_arg" \
+                --notes-output "$out"
+              return
+            fi
+
+            if [[ -n "$prev_tag" ]]; then
+              echo "[$loaders_arg] 前回タグ: $prev_tag からの差分を生成します"
+              since_args=(--since-ref "$prev_tag")
+            else
+              echo "[$loaders_arg] 前回タグが見つからないため Unreleased 全文を使用します"
+            fi
+
+            python3 scripts/changelog_tool.py "$MODE" \
+              --file CHANGELOG.md \
+              --loaders "$loaders_arg" \
+              --notes-output "$out" \
+              "${since_args[@]}"
+          }
+
+          emit_output() {
+            local key="$1" file="$2" delim
+            delim="STREAM_TWEAKS_$(openssl rand -hex 16)"
+            {
+              echo "${key}<<${delim}"
+              cat "$file"
+              echo "$delim"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          if [[ "$LOADERS" == "both" || "$LOADERS" == "fabric" ]]; then
+            generate_notes "$NOTES_DIR/fabric.md" fabric "$PREV_TAG_FABRIC"
+            emit_output notes_fabric "$NOTES_DIR/fabric.md"
+          fi
+
+          if [[ "$LOADERS" == "both" || "$LOADERS" == "neoforge" ]]; then
+            generate_notes "$NOTES_DIR/neoforge.md" neoforge "$PREV_TAG_NEOFORGE"
+            emit_output notes_neoforge "$NOTES_DIR/neoforge.md"
+          fi
+
+          generate_notes "$NOTES_DIR/combined.md" "$LOADER_LIST" "$PREV_TAG_COMBINED"
+          emit_output notes_combined "$NOTES_DIR/combined.md"
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-notes-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-notes
+          retention-days: 7
+
+      # ------------------------------------------------------------------
+      # 3. ビルド（タグ push より前に実行し、失敗してもタグを残さない）
+      # ------------------------------------------------------------------
+      - name: Build
+        shell: bash
+        env:
+          MOD_VERSION: ${{ steps.compute.outputs.version }}
+          LOADERS: ${{ steps.compute.outputs.loaders }}
+        run: |
+          set -euo pipefail
+
+          case "$LOADERS" in
+            both)
+              ./gradlew clean build --stacktrace "-Pmod_version=${MOD_VERSION}"
+              ;;
+            fabric)
+              ./gradlew clean :fabric:test :fabric:build --stacktrace "-Pmod_version=${MOD_VERSION}"
+              ;;
+            neoforge)
+              # 共通テストは現状 fabric サブプロジェクトの test タスクで実行する。
+              ./gradlew clean :fabric:test :neoforge:build --stacktrace "-Pmod_version=${MOD_VERSION}"
+              ;;
+            *)
+              echo "loaders の値が不正です: ${LOADERS}"
+              exit 1
+              ;;
+          esac
+
+      # ------------------------------------------------------------------
+      # 4. タグ作成 / push（ビルド成功後）
+      # ------------------------------------------------------------------
+      - name: Create and push annotated tag
+        shell: bash
+        env:
+          TAG: ${{ steps.compute.outputs.tag }}
+          LOADER_LIST: ${{ steps.compute.outputs.loader_list }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 認証に失敗したときに対話プロンプトで固まらせない
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+
+          # タグメッセージは「どのローダーを公開したか」だけを機械可読な形で残す。
+          # changelog 本文は含めない（自由入力が Loaders: 行のパースを汚染しうるため）。
+          MESSAGE_FILE="$RUNNER_TEMP/tag-message.txt"
+          printf 'Release %s\nLoaders: %s\n' "$TAG" "$LOADER_LIST" > "$MESSAGE_FILE"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # checkout は persist-credentials: false のため、push のときだけ token を渡す
+          git config credential.helper '!f() { printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f'
+
+          git tag -a "$TAG" -F "$MESSAGE_FILE"
+          git push origin "refs/tags/${TAG}"
+
+      # ------------------------------------------------------------------
+      # 5. 公開
+      # ------------------------------------------------------------------
+      # Modrinth の version は loaders 属性を持つため、Fabric / NeoForge を1つの
+      # version にまとめない（まとめると Fabric ユーザーが NeoForge jar を掴める）。
+      - name: Publish Fabric to Modrinth (mc-publish)
+        if: ${{ steps.compute.outputs.loaders == 'both' || steps.compute.outputs.loaders == 'fabric' }}
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          modrinth-id: jWHdryID
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+
+          name: Stream Tweaks ${{ steps.compute.outputs.tag }} (Fabric)
+          version: ${{ steps.compute.outputs.tag }}-fabric
+          version-type: ${{ steps.compute.outputs.channel }}
+
+          loaders: fabric
+          game-versions: ${{ steps.compute.outputs.mc }}
+          java: ${{ steps.setup-build.outputs.java-version }}
+
+          files: ${{ steps.compute.outputs.fabric_jar }}
+
+          changelog: ${{ steps.changelog.outputs.notes_fabric }}
+
+      - name: Publish NeoForge to Modrinth (mc-publish)
+        if: ${{ steps.compute.outputs.loaders == 'both' || steps.compute.outputs.loaders == 'neoforge' }}
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          modrinth-id: jWHdryID
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+
+          name: Stream Tweaks ${{ steps.compute.outputs.tag }} (NeoForge)
+          version: ${{ steps.compute.outputs.tag }}-neoforge
+          version-type: ${{ steps.compute.outputs.channel }}
+
+          loaders: neoforge
+          game-versions: ${{ steps.compute.outputs.mc }}
+          java: ${{ steps.setup-build.outputs.java-version }}
+
+          files: ${{ steps.compute.outputs.neoforge_jar }}
+
+          changelog: ${{ steps.changelog.outputs.notes_neoforge }}
+
+      # GitHub Release は1タグ1リリースなので、選択したローダーの jar をまとめて添付する
+      - name: Publish to GitHub Release (mc-publish)
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          name: Stream Tweaks ${{ steps.compute.outputs.tag }}
+          version: ${{ steps.compute.outputs.tag }}
+          version-type: ${{ steps.compute.outputs.channel }}
+
+          files: ${{ steps.compute.outputs.release_files }}
+
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-tag: ${{ steps.compute.outputs.tag }}
+          github-prerelease: ${{ steps.compute.outputs.channel != 'release' }}
+          github-draft: false
+          changelog: ${{ steps.changelog.outputs.notes_combined }}
+
+  notify:
+    name: Notify Discord
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download release notes
+        if: ${{ needs.release.result == 'success' }}
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-notes-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-notes
+
+      - name: Send Discord notification
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        shell: bash
+        env:
+          RELEASE_RESULT: ${{ needs.release.result }}
+          CHANNEL: ${{ needs.release.outputs.channel }}
+          TAG: ${{ needs.release.outputs.tag }}
+          MC_VERSION: ${{ needs.release.outputs.mc }}
+          LOADERS: ${{ needs.release.outputs.loaders }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          NOTES_FILE: ${{ runner.temp }}/release-notes/combined.md
+        run: |
+          set -euo pipefail
+
+          if [[ "$RELEASE_RESULT" == "success" ]]; then
+            STATUS="success"
+          else
+            STATUS="failure"
+          fi
+
+          python3 scripts/notify_discord.py \
+            --status "$STATUS" \
+            --channel "$CHANNEL" \
+            --tag "$TAG" \
+            --mc "$MC_VERSION" \
+            --loaders "$LOADERS" \
+            --run-url "$RUN_URL" \
+            --notes-file "$NOTES_FILE"

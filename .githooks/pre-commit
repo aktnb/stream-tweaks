@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+before_status="$(git status --short)"
+
+echo "Running spotlessApply..."
+./gradlew spotlessApply
+
+after_status="$(git status --short)"
+if [ "$before_status" != "$after_status" ]; then
+  echo "spotlessApply updated files. Review the changes, run git add, and commit again."
+  git status --short
+  exit 1
+fi
+
+echo "Running checkstyle..."
+./gradlew checkstyleMain checkstyleTest

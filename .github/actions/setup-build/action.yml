@@ -1,0 +1,38 @@
+name: 'Setup build environment'
+description: 'gradle.properties の java_version を単一の真実として JDK と Gradle キャッシュを準備する'
+
+outputs:
+  java-version:
+    description: 'セットアップした Java のメジャーバージョン'
+    value: ${{ steps.resolve.outputs.java-version }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      name: Resolve Java version from gradle.properties
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [[ ! -f gradle.properties ]]; then
+          echo "gradle.properties が見つかりません。checkout 後にこの action を呼び出してください" >&2
+          exit 1
+        fi
+
+        JAVA_VERSION="$(sed -nE 's/^[[:space:]]*java_version[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' gradle.properties | head -n1)"
+
+        if ! [[ "$JAVA_VERSION" =~ ^[0-9]+$ ]]; then
+          echo "gradle.properties の java_version が不正です (取得値: '${JAVA_VERSION}')" >&2
+          exit 1
+        fi
+
+        echo "java-version=${JAVA_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "Java ${JAVA_VERSION} をセットアップします"
+
+    - name: Setup Java
+      uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+      with:
+        distribution: 'temurin'
+        java-version: ${{ steps.resolve.outputs.java-version }}
+        cache: 'gradle'

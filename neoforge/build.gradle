@@ -1,0 +1,79 @@
+plugins {
+    id 'net.neoforged.moddev'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${rootProject.archives_base_name}-neoforge-mc${rootProject.minecraft_version}"
+}
+
+dependencies {
+    implementation "com.google.code.gson:gson:${rootProject.gson_version}"
+    // NeoForge本体が推移的に持ち込むバージョンと同じもの（3.8.3）を明示指定する。
+    // 共通コードから直接使うライブラリなので、推移的依存に暗黙に頼らずここでも宣言しておく。
+    implementation "com.electronwill.night-config:toml:${rootProject.nightconfig_version}"
+}
+
+sourceSets {
+    main {
+        // Loader-agnostic code lives in the root source tree; NeoForge-only code lives in neoforge/src.
+        java {
+            srcDir '../src/main/java'
+        }
+        resources {
+            srcDir '../src/main/resources'
+        }
+    }
+}
+
+processResources {
+    inputs.properties(
+            "minecraft_version": rootProject.minecraft_version,
+            "neoforge_mod_id": rootProject.neoforge_mod_id,
+            "mod_name": rootProject.mod_name,
+            "mod_version": project.version,
+            "neoforge_version": rootProject.neoforge_version)
+    filteringCharset = "UTF-8"
+
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand(
+                "minecraft_version": rootProject.minecraft_version,
+                "neoforge_mod_id": rootProject.neoforge_mod_id,
+                "mod_name": rootProject.mod_name,
+                "mod_version": project.version,
+                "neoforge_version": rootProject.neoforge_version)
+    }
+}
+
+neoForge {
+    version = rootProject.neoforge_version
+    validateAccessTransformers = true
+
+    runs {
+        client {
+            client()
+            gameDirectory = file("../run/neoforge")
+        }
+    }
+
+    mods {
+        streamTweaks {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+jar {
+    from(rootProject.file("LICENSE.txt")) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = "${rootProject.archives_base_name}-neoforge"
+            from components.java
+        }
+    }
+}

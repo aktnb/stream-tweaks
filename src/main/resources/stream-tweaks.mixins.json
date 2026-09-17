@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.etwas.streamtweaks.presentation.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+  ],
+  "client": [
+    "ChatComponentAccessor",
+    "FontManagerAccessor",
+    "FontStorageAccessor",
+    "FontStorageMixin",
+    "MutableComponentMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

@@ -1,0 +1,78 @@
+plugins {
+    id 'net.fabricmc.fabric-loom'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${rootProject.archives_base_name}-fabric-mc${rootProject.minecraft_version}"
+}
+
+repositories {
+    maven {
+        name = "TerraformersMC"
+        url = "https://maven.terraformersmc.com/releases/"
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_version}"
+
+    compileOnly "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
+    localRuntime "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
+
+    implementation "com.google.code.gson:gson:${rootProject.gson_version}"
+    implementation "com.electronwill.night-config:toml:${rootProject.nightconfig_version}"
+}
+
+sourceSets {
+    main {
+        // Loader-agnostic code lives in the root source tree; Fabric-only code lives in fabric/src.
+        java {
+            srcDir '../src/main/java'
+        }
+        resources {
+            srcDir '../src/main/resources'
+        }
+    }
+    test {
+        java.srcDir '../src/test/java'
+        resources.srcDir '../src/test/resources'
+    }
+}
+
+processResources {
+    inputs.property "version", project.version
+    filteringCharset = "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+loom {
+    runs {
+        client {
+            client()
+            configName = "Fabric Client"
+            ideConfigGenerated = true
+            runDir = "../run/fabric"
+        }
+    }
+}
+
+jar {
+    from(rootProject.file("LICENSE.txt")) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = "${rootProject.archives_base_name}-fabric"
+            from components.java
+        }
+    }
+}
