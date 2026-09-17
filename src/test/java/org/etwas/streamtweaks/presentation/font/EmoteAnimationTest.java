@@ -33,11 +33,12 @@ class EmoteAnimationTest {
 
     @Test
     void multiFrameAnimationIsAnimated() {
-        EmoteAnimation animation =
-                new EmoteAnimation(List.of(new EmoteFrame(frame0, 100), new EmoteFrame(frame1, 200)));
+        EmoteAnimation animation = new EmoteAnimation(
+                List.of(new EmoteFrame(frame0, 100), new EmoteFrame(frame1, 200)));
 
         assertTrue(animation.isAnimated());
         assertEquals(2, animation.frames().size());
+        animation.close();
     }
 
     @Test
@@ -52,8 +53,8 @@ class EmoteAnimationTest {
 
     @Test
     void closeClosesAllFrames() {
-        EmoteAnimation animation =
-                new EmoteAnimation(List.of(new EmoteFrame(frame0, 100), new EmoteFrame(frame1, 200)));
+        EmoteAnimation animation = new EmoteAnimation(
+                List.of(new EmoteFrame(frame0, 100), new EmoteFrame(frame1, 200)));
 
         animation.close();
 
@@ -78,5 +79,6 @@ class EmoteAnimationTest {
         EmoteAnimation animation = new EmoteAnimation(List.of(new EmoteFrame(frame0, 0)));
 
         assertFalse(animation.isAnimated());
+        animation.close();
     }
 }
