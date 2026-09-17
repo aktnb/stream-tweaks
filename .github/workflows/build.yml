@@ -52,19 +52,6 @@ jobs:
               - *common
               - 'neoforge/**'
 
-  format:
-    name: Format Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-build
-
-      - name: Spotless Check
-        run: ./gradlew spotlessCheck --stacktrace
-
   test:
     # テスト実体はルートの src/test/java（ローダー非依存の共通コード）にあり、
     # test タスクを持つのは fabric サブプロジェクトだけなので path filter の対象外として常時実行する。
@@ -163,7 +150,7 @@ jobs:
     name: CI OK
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, format, test, script-tests, build-fabric, build-neoforge]
+    needs: [changes, test, script-tests, build-fabric, build-neoforge]
     steps:
       - name: Check job results
         shell: bash

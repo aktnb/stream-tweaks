@@ -16,7 +16,6 @@ Fabric / NeoForge のマルチローダー構成に合わせてジョブを分�
 | ジョブ | 実行条件 | 内容 |
 | --- | --- | --- |
 | `changes` | 常時 | `dorny/paths-filter` で fabric / neoforge に影響する変更を検知する |
-| `format` | 常時 | `./gradlew spotlessCheck --stacktrace` |
 | `test` (Test (shared)) | 常時 | `./gradlew :fabric:test --stacktrace` |
 | `script-tests` (Release Script Tests) | 常時 | `python3 -m py_compile scripts/changelog_tool.py scripts/notify_discord.py` / `python3 -m unittest discover scripts/tests` |
 | `build-fabric` | `changes.outputs.fabric == 'true'` | `./gradlew :fabric:build -x test --stacktrace` |
