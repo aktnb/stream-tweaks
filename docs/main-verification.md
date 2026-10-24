@@ -37,4 +37,6 @@ Release の2操作は計画／bundle準備までの非公開検証です。tag�
 
 ## 完了判定
 
-この PR は `main` 宛て PR CI を確認するための draft です。上記5 dispatch とこの PR の `CI OK` が成功し、artifact／source SHA を照合するまで draft とし、default branch は変更しません。runbook の他のゲート、最終readback、復旧手順の確認が済むまで Issue #14 を閉じません。
+[PR #21 の main 宛て CI run 40108505766](https://github.com/aktnb/stream-tweaks/actions/runs/40108505766) は head SHA `e162f971c6f742bf30e5673adefc8781ddaa3256` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。これはmain宛てPR CIの確認ですが、Loaderの単target／全対象検証の代わりにはなりません。
+
+この PR は引き続き draft です。上記5 dispatch が成功し、artifact／source SHA を照合するまで default branch は変更しません。runbookの他ゲート、最終readback、復旧手順の確認が済むまで Issue #14 を閉じません。
