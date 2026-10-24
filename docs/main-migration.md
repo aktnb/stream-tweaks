@@ -1,22 +1,41 @@
 # main を Active 公開元へ移す手順（Issue #14）
 
 この runbook は移行準備であり、移行完了の記録ではありません。
-現時点で main 作成・default 変更・保護設定変更は実施していません。
-依存する全対象 CI と削除しない公開復旧手順が導入されるまで実行しません。
+この準備差分の台帳はmainを権威元・唯一の公開元に予約しますが、main作成・default変更はまだ実施していません。
+管理確認と先行dispatchの gate を満たすまでは準備 PR を draft のままにし、merge・新規公開を行いません。
 [対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
 ## 事前確認と現在の権限
 
-2026-10-24 の接続 GitHub API による確認では、default は `26.2`、唯一の branch も `26.2`、
-HEAD は `06436c1607e826b5d2dfaccb3edfebd7d23ed7f6` です。実行時は必ず取り直します。
+2026-10-24 の先行基盤 [PR #18](https://github.com/aktnb/stream-tweaks/pull/18) は26.2へmerge済みです。
+default は `26.2`、その確認時点のHEADは `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d`、mainは未作成です。
+feature branchも実在するため「branchは26.2のみ」とは扱いません。実行直前に必ず取り直します。
+
+| 先行実績 | 記録した SHA の意味 | 結果 |
+| --- | --- | --- |
+| [PR CI 40094910231](https://github.com/aktnb/stream-tweaks/actions/runs/40094910231) | PR head `6af0e2d4dd63456103389701c7abd6b877702a16`。test merge checkout SHAとは区別する | 両Loader build／JAR検証・共有test・format・script tests・CI OK成功 |
+| [merge後push CI 40095310540](https://github.com/aktnb/stream-tweaks/actions/runs/40095310540) | 実source `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` | 両Loader build／JAR検証・共有test・format・script tests・CI OK成功 |
+
+台帳の build 記録はこのmerge後sourceの実績です。今回の準備 PR の未作成commitを検証済みとは扱わず、
+runtime smoke も未確認のままです。
+
 本人 `aktnb` の repository 権限は admin ですが、接続 App の classic branch protection 読取は
 `403 Resource not accessible by integration` です。本人の admin 権限だけで接続 App の管理操作が
-可能とは判断しません。403 を別経路で迂回せず、管理者が正規の設定画面または管理権限付き接続で確認します。
+可能とは判断しません。この管理APIはmanaged App接続の対象外で、権限追加の再試行や別認証経路で迂回しません。
+管理者が正規の設定画面でclassic ruleの有無・設定を確認し、読取可能なruleset APIのreadbackと併せて記録します。
 
-ruleset `23603340`（Push Protection）は `~DEFAULT_BRANCH` の deletion / non_fast_forward 禁止のみでした。
-この ruleset 単独では `CI OK` 必須を証明できません。また default 切替後は `26.2` がこの対象から外れます。
-切替前に main と26.2の双方を明示対象とする保護を用意し、既存のレビュー要件・制限を弱めないでください。
-matching-refs/tags の結果と Release 一覧はいずれも空でしたが、これも実行直前の一覧を基準にします。
+ruleset `23603340`（Push Protection）はユーザー操作で一度disabledになった後、
+**2026-10-24 12:59 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
+deletion / non_fast_forward 禁止と required_status_checks rule、bypassなしでした。
+ただし `required_status_checks=[]` で **CI OKが未追加**のため、必須checkの gate は未達です。
+`strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
+この条件では準備merge後の同一source commitにCI OK成功が付くのを待ってからmainを作成します。
+
+2026-10-24 12:51 UTC時点のmatching-refs/tagsとRelease一覧は空、全runはBuildだけの5件で、
+進行中publishはありませんでした。`plan-new`（0.3.3-beta.1 / beta / both）のdispatch試行は
+`403 Must have admin rights to Repository`でrun未作成、prepareは未試行です。
+ユーザーUIからの単target／全対象／plan／prepare成功確認はまだ済んでいません。
+一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
 | --- | --- | --- |
@@ -31,15 +50,22 @@ matching-refs/tags の結果と Release 一覧はいずれも空でしたが、�
 [保護 API](https://docs.github.com/en/rest/branches/branch-protection)、
 [repository 更新 API](https://docs.github.com/en/enterprise-cloud%40latest/rest/repos/repos#update-a-repository)を参照してください。
 現接続には default / 保護設定の更新ツールもないため、この接続だけで移行完了を宣言しません。
+rulesetのreadbackは利用でき、`CI OK` がrequired checksに含まれる実設定はそこで検証します。
 
 ## 切替前のゲート
 
-- #8 と #13 を含む先行基盤を26.2へ導入し、対象 PR CI、単 target／全対象 dispatch、公開なし計画を確認する。
+- #8 と #13 を含む先行基盤はPR #18で26.2へ導入済み。上記のPR／push CI成功に加え、
+  単 target／全対象 dispatch、公開なしplan／prepareの成功runを確認する。
+  **この切替前の検証は準備 PR のmerge前に、既存台帳の権威元・公開元が26.2である `--ref 26.2` で実行する。**
+  GitHub UI の `Use workflow from` も `26.2` を選ぶ。Buildの単target、Validate supported targetsのall／subset、
+  Releaseの `plan-new`／`prepare-new` のいずれも同じ実行refを使い、mainや準備feature branchでは実行しない。
+  main作成後の手順5では、別途mainを実行refとして再検証する。切替前の成功をその代わりにしない。
 - 公開担当を決め、Tag／Release／Modrinth への新規公開を停止する。実行中 publish を途中 cancel せず、
   完了または部分成功の状態と release ID／manifest hash を照合する。不明なまま切替えない。
 - default、26.2 の full SHA、ruleset／classic protection、Tag と peeled SHA、Release と asset hash を保存する。
 - branch 作成・dispatch・管理設定・復旧が正規の認可で実行できることを確認する。
-  特に classic protection 読取が403のままなら準備 PR を merge しない。
+  classic protection読取403の場合は正規UIで有無・設定を確認し、main／26.2へのactive rulesetと
+  `CI OK` 必須設定をreadbackで証明するまで準備 PR を merge しない。
 - 下記の公開元と検証 branch の分離をレビューし、設定の復元手順を確保する。
   必須 check の無効化・成功偽装や、target 行の公開元の書換えによる暗黙 alias は使わない。
 
@@ -63,7 +89,8 @@ MC / Java / Loader properties は元の台帳行と照合し、checkout は固�
 
 1. 26.2 を base とする準備 PR を作る。`support-targets.json` の `authority_branch` と、
    現行26.2の両 Loader 行の `source_branch` を **すべて `main`** にする。
-   MC／Loader／検証実績は変えず、未検証結果を成功へ書き換えない。26.2 はまだ Maintenance にしない。
+   MC／Loaderは変えず、実施済みbuildだけsource SHA／run URL付きで記録する。runtime未検証を成功へ書き換えない。
+   26.2 はまだ Maintenance にしない。この差分はdraftで準備できるが、上のgateが未達ならmergeしない。
 2. 準備 PR の CI は宛先 `base.sha` の旧 catalog を使うため、引き続き26.2として検証される。
    merge SHA の properties と両 Loader build、script tests が成功した証拠を保存して merge する。
    テスト用catalogは `scripts/tests/fixtures/` に固定してあり、実台帳をmainへ変えても
@@ -73,11 +100,13 @@ MC / Java / Loader properties は元の台帳行と照合し、checkout は固�
    main が未作成の短い期間は全対象 resolver や公開計画のmain指定はまだ成功しないので、
    公開停止を維持する。旧 branch の CI 成功をmain上の検証証拠に代用しない。
 4. merge 後に API から26.2の最新 full SHA を再取得し、準備 PR を含むことを確認する。
+   同じSHAの26.2 push CIが成功し、必須 `CI OK` が付いていることを確認する。
    その **同じ SHA** から新規 main を作る。main が既存なら上書き／force updateせず、その由来を再確認する。
    26.2の履歴や ref を変更せず、作成した main の SHA を readback で照合する。
 5. main は最初から `authority_branch=main`／`source_branch=main` の台帳を持つので、
    宛先catalogの特例なしにmain上の通常PR CIを実行できる。
-   main宛て確認 PR、`26.2-fabric` と `26.2-neoforge` の単 target dispatch、全 supported dispatch、
+   main宛て確認 PRに加え、ここからは **`--ref main`（UIの `Use workflow from: main`）** を選び、
+   `26.2-fabric` と `26.2-neoforge` の単 target dispatch、全 supported dispatch、
    `plan-new` および公開なし `prepare-new` を実行する。release操作名は導入済みworkflowの入力と照合する。
    Tag／公開 adapter を起動する操作は移行確認に使用しない。
 6. 成功した run の full source SHA／MC／Loader／実 JDK／結果を保存する。
@@ -123,9 +152,9 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 | #14 の受入条件 | 保存すべき証拠 | 現時点 |
 | --- | --- | --- |
 | main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | 未実施 |
-| 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | 実台帳は移行前26.2のまま |
-| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 前後比較は未実施 |
-| CI OK必須と対象保護 | classic protection／rulesetの実設定readback | classic読取403、未確認 |
+| 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | 準備差分はmain予約。remote台帳切替・main作成は未実施 |
+| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 先行一覧はTag／Releaseとも空。移行前後比較は未実施 |
+| CI OK必須と対象保護 | UI確認／rulesetの実設定readback | rulesetは両branch対象active、CI OK未追加。classic有無のUI確認待ち |
 | default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | runbookのみ、外部切替なし |
 
 これらが揃うまで Issue #14 を完了扱いにしません。
