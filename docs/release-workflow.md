@@ -22,7 +22,8 @@ Upload 用 `CURSEFORGE_TOKEN` と project／file 照合用 `CURSEFORGE_API_KEY` 
 ## 前提と権限の確認
 
 新規計画は `support-targets.json` の唯一の公開元と supported 行を使います。
-現在は `26.2`、[main 移行](main-migration.md)後は台帳に従います。
+準備台帳はmainを公開元に予約しています。main未作成・管理確認未完了の間は新規公開を停止し、
+[main 移行](main-migration.md)の gate 完了後だけ以下の新規手順を使います。
 移行後に元の計画を再開するときは、実行 ref を main にしても `release_source_branch=26.2` と元 SHA を維持します。
 
 | 用途 | 必要な権限・設定 | 未設定・不足時 |
@@ -54,8 +55,8 @@ python3 scripts/changelog_tool.py read --version 0.3.4
 以後の例は同じ shell で使います。`RELEASE_REF` と元の `RELEASE_SOURCE_BRANCH` は実在する公開元に合わせます。
 
 ```sh
-RELEASE_REF=26.2
-RELEASE_SOURCE_BRANCH=26.2
+RELEASE_REF=main
+RELEASE_SOURCE_BRANCH=main
 RELEASE_VERSION=0.3.4-beta.1
 RELEASE_MC=26.2
 RELEASE_CHANNEL=beta

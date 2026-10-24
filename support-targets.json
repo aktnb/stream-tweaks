@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "authority_branch": "26.2",
+  "authority_branch": "main",
   "targets": [
     {
       "id": "26.2-fabric",
@@ -8,12 +8,20 @@
       "loader": "fabric",
       "lifecycle": "active",
       "support": "supported",
-      "source_branch": "26.2",
+      "source_branch": "main",
       "java_version": 25,
       "features": ["twitch-chat", "message-delete", "emotes", "config-screen", "modmenu"],
       "limitations": ["クライアント専用。runtime smoke は未確認。"],
       "verification": {
-        "build": {"status": "unverified", "date": null, "evidence": []},
+        "build": {
+          "status": "passed",
+          "date": "2026-10-24",
+          "evidence": [
+            "https://github.com/aktnb/stream-tweaks/actions/runs/40095310540",
+            "source_sha=965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d",
+            "https://github.com/aktnb/stream-tweaks/actions/runs/40095310540/job/120876204354"
+          ]
+        },
         "runtime_smoke": {"status": "unverified", "date": null, "evidence": []}
       }
     },
@@ -23,12 +31,20 @@
       "loader": "neoforge",
       "lifecycle": "active",
       "support": "supported",
-      "source_branch": "26.2",
+      "source_branch": "main",
       "java_version": 25,
       "features": ["twitch-chat", "message-delete", "emotes", "config-screen"],
       "limitations": ["クライアント専用。ModMenu は Fabric 限定。runtime smoke は未確認。"],
       "verification": {
-        "build": {"status": "unverified", "date": null, "evidence": []},
+        "build": {
+          "status": "passed",
+          "date": "2026-10-24",
+          "evidence": [
+            "https://github.com/aktnb/stream-tweaks/actions/runs/40095310540",
+            "source_sha=965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d",
+            "https://github.com/aktnb/stream-tweaks/actions/runs/40095310540/job/120876204357"
+          ]
+        },
         "runtime_smoke": {"status": "unverified", "date": null, "evidence": []}
       }
     }

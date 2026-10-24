@@ -2,13 +2,15 @@
 
 `support-targets.json` を CI・公開計画の対象選択の入口にする。現行の2 target は
 `26.2-fabric` / `26.2-neoforge`。ModMenu は Fabric 限定で、NeoForge でも設定画面自体は利用できる。
-この追加は既存 build / release workflow の実行経路を変更しない。
+この準備変更では台帳の権威元と両行の公開元をmainに予約するが、main作成・default切替はまだ行わない。
+管理確認と移行検証が完了するまで新規公開を停止する。[移行 gate](main-migration.md)を先に確認する。
 方針は [support-policy.md](support-policy.md)、版番号は [versioning.md](versioning.md) を参照。
 
 ## スキーマと権威元
 
 schema version は1。トップレベルは `schema_version` / `authority_branch` / `targets`。
-main 導入前は `authority_branch=26.2`、導入後に main へ切り替える。
+準備台帳は `authority_branch=main`。移行準備 PR の宛先26.2には merge 前の台帳を使い、
+merge 後の最新26.2 SHAからmainを作成する。台帳の文字列だけでmainの実在・移行完了を宣言しない。
 これは全体台帳の権威元であり、各 target の `source_branch` とは用途が異なる。
 各 source checkout の `gradle.properties` が実際のビルド値の真実で、台帳を使って上書きしない。
 
@@ -42,7 +44,7 @@ python3 scripts/validate_targets.py --target 26.2-fabric
 python3 scripts/validate_targets.py --loader neoforge
 python3 scripts/validate_targets.py --minecraft 26.2
 python3 scripts/validate_targets.py --target 26.2-fabric --target 26.2-neoforge
-python3 scripts/validate_targets.py --all-supported --properties gradle.properties --source-branch 26.2
+python3 scripts/validate_targets.py --all-supported --properties gradle.properties --source-branch main
 ```
 
 出力は `{schema_version, authority_branch, targets}` の決定的 JSON（ID 順、キー順固定）。
@@ -52,6 +54,7 @@ python3 scripts/validate_targets.py --all-supported --properties gradle.properti
 testing / unsupported / EOL は全選択から除外し、明示 target 指定はエラーとする。
 
 properties 照合には `--properties` / `--source-branch` を必ず対で渡す。
+上の main 指定は台帳と properties の値の照合であり、main ref の存在確認ではない。
 選択行すべての MC / Java / source branch、Loader 設定の存在を照合するため、
 複数 branch の全体台帳を1 checkout の properties だけで照合しない。
 全対象 CI では各 source branch を SHA へ固定してから、当該 checkout ごとに照合する。
