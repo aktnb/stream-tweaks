@@ -2,7 +2,7 @@
 
 この runbook は移行準備であり、移行完了の記録ではありません。
 この準備差分の台帳はmainを権威元・唯一の公開元に予約しますが、main作成・default変更はまだ実施していません。
-管理確認と先行dispatchの gate を満たすまでは準備 PR を draft のままにし、merge・新規公開を行いません。
+rulesetの必須check、classic ruleのUI確認と切替前dispatchは確認済みですが、main移行の実行完了を示すものではありません。準備 PR は引き続きdraftとし、ここではmerge・main作成・default変更・新規公開を行いません。
 [対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
 ## 事前確認と現在の権限
@@ -20,19 +20,20 @@ feature branchも実在するため「branchは26.2のみ」とは扱いませ�
 `525f14996b7e1e52228fe11ecdfd17fdafa22d7a` は [PR CI 40097505222](https://github.com/aktnb/stream-tweaks/actions/runs/40097505222)
 が成功し、両Loader build／JAR検証・共有test・format・script tests・`CI OK` を含む全7 jobが成功しました。
 直前のhead `8617d901317141aab8625b9fb01897a425f4df47` も [PR CI 40097096849](https://github.com/aktnb/stream-tweaks/actions/runs/40097096849) が成功しています。
+base同期後のPR head `1beb62dba2996ef54d1fbf80b7d1324234a355bb`（base `d5d8127b040148ff350c8d08acb70191fac45b23` と feature head `f97a0afb5b40e11af626411845648e0222ade4b4` のsynthetic merge commit）も [PR CI 40098924406](https://github.com/aktnb/stream-tweaks/actions/runs/40098924406) で全7 jobが成功しました。
 runtime smoke は未確認のままです。
 
 本人 `aktnb` の repository 権限は admin ですが、接続 App の classic branch protection 読取は
 `403 Resource not accessible by integration` です。本人の admin 権限だけで接続 App の管理操作が
 可能とは判断しません。この管理APIはmanaged App接続の対象外で、権限追加の再試行や別認証経路で迂回しません。
-管理者が正規の設定画面でclassic ruleの有無・設定を確認し、読取可能なruleset APIのreadbackと併せて記録します。
+2026-10-24、repository ownerのGitHub UI確認でclassic branch protection ruleなしと確認しました。ruleset APIのreadbackと併せて、下記のbranch保護状態を記録します。
 
 ruleset `23603340`（Push Protection）はユーザー操作で一度disabledになった後、
-**2026-10-24 13:31 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
+**2026-10-24 13:40 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
 deletion / non_fast_forward 禁止、bypassなしでした。必須status checkは
 `[{"context":"CI OK","integration_id":15368}]` と確認し、CI OKの必須化も反映されています。
 `strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
-接続Appからのclassic branch protection読取は引き続き `403 Resource not accessible by integration` のため、classic ruleの有無は未確認です。
+接続Appからのclassic branch protection読取は引き続き `403 Resource not accessible by integration` ですが、repository ownerの2026-10-24 UI確認ではclassic ruleなしです。
 このrulesetのreadbackをもって、両branchでCI OKを必須にする設定を確認しました。main作成前にもreadbackを再確認します。
 
 2026-10-24 12:51 UTC時点のmatching-refs/tagsとRelease一覧は空で、進行中publishはありませんでした。
@@ -59,7 +60,9 @@ prepare-new artifactの照合結果:
   bundle内 `release-manifest.json` のSHA256は `f564edb84ecd19871bb89dffff16a0787862380259e5004f3d50c48a37532553` で、2 LoaderのJARを含みます。
 - artifactを取得し、`release_bundle.py verify` をsource SHAと固定planに対して実行して成功しました。
 
-`plan-new` 自体はまだ成功runがありません。上記prepare-new内の固定plan計算は成功していますが、別operationである `plan-new` のUI実行を確認するまでは、切替前のplan gateは未達です。
+その後、[Release の plan-new run 40098896694](https://github.com/aktnb/stream-tweaks/actions/runs/40098896694) が `workflow_dispatch` で成功しました。実行refは `26.2`、fixed source SHAは `d5d8127b040148ff350c8d08acb70191fac45b23`、release version `0.3.3-beta.1`、channel `beta`、loaders `both` です。Fabric／NeoForge両targetのplanを計算し、Compute fixed plan jobが成功、bundle build／staging／draft保存はskipされました。公開操作はありません。
+plan artifact ID `12561936649`（`release-plan-40098896694-d5d8127b040148ff350c8d08acb70191fac45b23`）のarchive SHA256は `42f49de7820544150ee2190efb763088c6cdad3278cffbab5c0c78bdc7d4a007` です。artifact metadataとrun logでsource branch／SHAおよびtarget集合を照合しました。
+切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。main作成後のPR／単target／全target CIとplanは未実施なので移行完了ではありません。
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
@@ -67,7 +70,7 @@ prepare-new artifactの照合結果:
 | branch / catalog / run / Tag / Release の照会 | Contents / Actions read 等 | full SHA、取得結果、run URL |
 | main 作成 | Contents write（workflow を含む場合の Workflows 権限も確認） | main ref の readback |
 | 単 target・全対象・公開なし計画の dispatch | Actions write | 成功した run と immutable SHA |
-| classic protection の照会 | Administration read | 実設定の readback、403 は未確認 |
+| classic protection の照会 | Administration read | owner UIでclassic ruleなしを確認。managed App APIは403 |
 | default・保護設定の変更と復元 | Administration write と対象管理権限 | 変更後 readback と復元記録 |
 
 権限根拠は [Git reference API](https://docs.github.com/en/rest/git/refs#create-a-reference)、
@@ -179,7 +182,7 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 | main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | 未実施 |
 | 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | 準備差分はmain予約。remote台帳切替・main作成は未実施 |
 | 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 先行一覧はTag／Releaseとも空。移行前後比較は未実施 |
-| CI OK必須と対象保護 | ruleset実設定readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleの有無はAPI403で未確認 |
+| CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをUIで確認 |
 | default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | runbookのみ、外部切替なし |
 
 これらが揃うまで Issue #14 を完了扱いにしません。
