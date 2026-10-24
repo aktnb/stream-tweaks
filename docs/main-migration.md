@@ -63,7 +63,7 @@ prepare-new artifactの照合結果:
 その後、[Release の plan-new run 40098896694](https://github.com/aktnb/stream-tweaks/actions/runs/40098896694) が `workflow_dispatch` で成功しました。実行refは `26.2`、fixed source SHAは `d5d8127b040148ff350c8d08acb70191fac45b23`、release version `0.3.3-beta.1`、channel `beta`、loaders `both` です。Fabric／NeoForge両targetのplanを計算し、Compute fixed plan jobが成功、bundle build／staging／draft保存はskipされました。公開操作はありません。
 plan artifact ID `12561936649`（`release-plan-40098896694-d5d8127b040148ff350c8d08acb70191fac45b23`）のarchive SHA256は `42f49de7820544150ee2190efb763088c6cdad3278cffbab5c0c78bdc7d4a007` です。artifact metadataとrun logでsource branch／SHAおよびtarget集合を照合しました。
 切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。2026-10-24 13:45 UTCに、確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成し、`26.2` と同じSHAを指すことを再取得しました。初回 push [run 40099703840](https://github.com/aktnb/stream-tweaks/actions/runs/40099703840) は成功し、`CI OK` も成功しましたが、loader build matrix はskipでした。
-main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) の [CI run 40108971814](https://github.com/aktnb/stream-tweaks/actions/runs/40108971814) は head SHA `5f16f669b82ee18649b65eba77441ed317215085` で成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。Fabric Build [run 40108697819](https://github.com/aktnb/stream-tweaks/actions/runs/40108697819)、NeoForge Build [run 40109082948](https://github.com/aktnb/stream-tweaks/actions/runs/40109082948)、Validate all [run 40109129345](https://github.com/aktnb/stream-tweaks/actions/runs/40109129345)、Release plan-new [run 40109428132](https://github.com/aktnb/stream-tweaks/actions/runs/40109428132) は成功済みです。Release prepare-newは未実施なので、移行完了ではありません.
+main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) の [CI run 40109714879](https://github.com/aktnb/stream-tweaks/actions/runs/40109714879) は head SHA `0927f4c304164d2332ee463a2903d42f1f4ce85e` で成功しました。Fabric／NeoForge単target Build、Validate all、Release plan-new／prepare-new の5 dispatchもすべて成功し、各結果とartifact digestは [検証記録](main-verification.md) にあります。すべてsource SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を使い、Release操作ではtag／公開／通知を実行していません。final readbackとdefault切替は未完了です。
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
@@ -180,7 +180,7 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 
 | #14 の受入条件 | 保存すべき証拠 | 現時点 |
 | --- | --- | --- |
-| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21 run 40108971814成功（loader matrix skip）。両Loader単target、Validate all、plan-new成功。prepare-newのみ未実施 |
+| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21 run 40109714879成功（docs-onlyでloader matrix skip）。5 dispatch成功、source SHA da51f9d…、JDK Temurin 25.0.4。詳細hashはmain-verification.md |
 | 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | mainのauthority/sourceはmain、26.2とmainのrefは同じSHA。defaultは26.2のまま |
 | 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | main作成前はTag／Releaseとも0件。main作成後のGitHub Releasesも空。Tag／asset最終再照合は未実施 |
 | CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをowner UIで確認 |
