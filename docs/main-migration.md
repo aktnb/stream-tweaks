@@ -2,7 +2,7 @@
 
 この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行検証の途中経過](main-verification.md) を参照してください。
 2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` と同じSHAから `main` を作成しました。現在、mainと26.2は同じSHAを指し、default branch はまだ `26.2` です。
-切替前のdispatchゲートと ruleset / classic rule の確認は済みました。main上のPR／単target／全対象検証とReleaseのplan/prepare dispatchは未完了です。移行完了扱いにせず、新規公開を停止したままにします。
+切替前のdispatchゲートと ruleset / classic rule の確認は済み、main上のPR CI／単target／全対象検証／Releaseのplan-new・prepare-newも成功しました。default branch切替と切替後の最終readbackは未実施のため、移行完了扱いにせず新規公開を停止したままにします。
 [対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
 ## 事前確認と現在の権限
@@ -29,7 +29,7 @@ runtime smoke は未確認のままです。
 2026-10-24、repository ownerのGitHub UI確認でclassic branch protection ruleなしと確認しました。ruleset APIのreadbackと併せて、下記のbranch保護状態を記録します。
 
 ruleset `23603340`（Push Protection）はユーザー操作で一度disabledになった後、
-**2026-10-24 13:40 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
+**2026-10-24 16:10 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
 deletion / non_fast_forward 禁止、bypassなしでした。必須status checkは
 `[{"context":"CI OK","integration_id":15368}]` と確認し、CI OKの必須化も反映されています。
 `strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
@@ -63,7 +63,7 @@ prepare-new artifactの照合結果:
 その後、[Release の plan-new run 40098896694](https://github.com/aktnb/stream-tweaks/actions/runs/40098896694) が `workflow_dispatch` で成功しました。実行refは `26.2`、fixed source SHAは `d5d8127b040148ff350c8d08acb70191fac45b23`、release version `0.3.3-beta.1`、channel `beta`、loaders `both` です。Fabric／NeoForge両targetのplanを計算し、Compute fixed plan jobが成功、bundle build／staging／draft保存はskipされました。公開操作はありません。
 plan artifact ID `12561936649`（`release-plan-40098896694-d5d8127b040148ff350c8d08acb70191fac45b23`）のarchive SHA256は `42f49de7820544150ee2190efb763088c6cdad3278cffbab5c0c78bdc7d4a007` です。artifact metadataとrun logでsource branch／SHAおよびtarget集合を照合しました。
 切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。2026-10-24 13:45 UTCに、確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成し、`26.2` と同じSHAを指すことを再取得しました。初回 push [run 40099703840](https://github.com/aktnb/stream-tweaks/actions/runs/40099703840) は成功し、`CI OK` も成功しましたが、loader build matrix はskipでした。
-main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) の [CI run 40109714879](https://github.com/aktnb/stream-tweaks/actions/runs/40109714879) は head SHA `0927f4c304164d2332ee463a2903d42f1f4ce85e` で成功しました。Fabric／NeoForge単target Build、Validate all、Release plan-new／prepare-new の5 dispatchもすべて成功し、各結果とartifact digestは [検証記録](main-verification.md) にあります。すべてsource SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を使い、Release操作ではtag／公開／通知を実行していません。final readbackとdefault切替は未完了です。
+main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) の最新確認済みCI run [40110010992](https://github.com/aktnb/stream-tweaks/actions/runs/40110010992) は head SHA `2ebba9f9c41a653053f3801d4a99ff55246fa82f` で成功しました。Fabric／NeoForge単target Build、Validate all、Release plan-new／prepare-new の5 dispatchもすべて成功し、各結果とartifact digestは [検証記録](main-verification.md) にあります。すべてsource SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を使い、Release操作ではtag／公開／通知を実行していません。最終readbackとdefault切替は未完了です。
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
@@ -180,9 +180,9 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 
 | #14 の受入条件 | 保存すべき証拠 | 現時点 |
 | --- | --- | --- |
-| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21 run 40109714879成功（docs-onlyでloader matrix skip）。5 dispatch成功、source SHA da51f9d…、JDK Temurin 25.0.4。詳細hashはmain-verification.md |
+| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21 run 40110010992成功（head `2ebba9f9c41a653053f3801d4a99ff55246fa82f`、docs-onlyでloader matrix skip）。5 dispatch成功、source SHA da51f9d…、JDK Temurin 25.0.4。詳細hashはmain-verification.md |
 | 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | mainのauthority/sourceはmain、26.2とmainのrefは同じSHA。defaultは26.2のまま |
-| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | main作成前はTag／Releaseとも0件。main作成後のGitHub Releasesも空。Tag／asset最終再照合は未実施 |
+| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 5件のmain向けdispatch後のreadbackでmatching tags／GitHub Releasesとも0件。default切替後のTag／Release／asset最終再照合は未実施 |
 | CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをowner UIで確認 |
 | default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 手順あり。default切替は未実施、復旧操作なし |
 
