@@ -1,8 +1,8 @@
 # main を Active 公開元へ移す手順（Issue #14）
 
-この runbook は移行準備であり、移行完了の記録ではありません。
-この準備差分の台帳はmainを権威元・唯一の公開元に予約しますが、main作成・default変更はまだ実施していません。
-rulesetの必須check、classic ruleのUI確認と切替前dispatchは確認済みですが、main移行の実行完了を示すものではありません。準備 PR は引き続きdraftとし、ここではmerge・main作成・default変更・新規公開を行いません。
+この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行検証の途中経過](main-verification.md) を参照してください。
+2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` と同じSHAから `main` を作成しました。現在、mainと26.2は同じSHAを指し、default branch はまだ `26.2` です。
+切替前のdispatchゲートと ruleset / classic rule の確認は済みました。main上のPR／単target／全対象検証とReleaseのplan/prepare dispatchは未完了です。移行完了扱いにせず、新規公開を停止したままにします。
 [対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
 ## 事前確認と現在の権限
@@ -62,7 +62,8 @@ prepare-new artifactの照合結果:
 
 その後、[Release の plan-new run 40098896694](https://github.com/aktnb/stream-tweaks/actions/runs/40098896694) が `workflow_dispatch` で成功しました。実行refは `26.2`、fixed source SHAは `d5d8127b040148ff350c8d08acb70191fac45b23`、release version `0.3.3-beta.1`、channel `beta`、loaders `both` です。Fabric／NeoForge両targetのplanを計算し、Compute fixed plan jobが成功、bundle build／staging／draft保存はskipされました。公開操作はありません。
 plan artifact ID `12561936649`（`release-plan-40098896694-d5d8127b040148ff350c8d08acb70191fac45b23`）のarchive SHA256は `42f49de7820544150ee2190efb763088c6cdad3278cffbab5c0c78bdc7d4a007` です。artifact metadataとrun logでsource branch／SHAおよびtarget集合を照合しました。
-切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。main作成後のPR／単target／全target CIとplanは未実施なので移行完了ではありません。
+切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。2026-10-24 13:45 UTCに、確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成し、`26.2` と同じSHAを指すことを再取得しました。初回 push [run 40099703840](https://github.com/aktnb/stream-tweaks/actions/runs/40099703840) は成功し、`CI OK` も成功しましたが、loader build matrix はskipでした。
+main宛てPR CIはdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) で確認中です。mainの単target／全対象CI、`plan-new`／`prepare-new` dispatch は未実施なので、移行完了ではありません。
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
@@ -179,10 +180,10 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 
 | #14 の受入条件 | 保存すべき証拠 | 現時点 |
 | --- | --- | --- |
-| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | 未実施 |
-| 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | 準備差分はmain予約。remote台帳切替・main作成は未実施 |
-| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 先行一覧はTag／Releaseとも空。移行前後比較は未実施 |
-| CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをUIで確認 |
-| default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | runbookのみ、外部切替なし |
+| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21 draftでPR CI確認中。初回push CIは成功したがloader matrixはskip。単target／全対象／plan／prepare dispatchは未実施 |
+| 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | mainのauthority/sourceはmain、26.2とmainのrefは同じSHA。defaultは26.2のまま |
+| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | main作成前はTag／Releaseとも0件。main作成後のGitHub Releasesも空。Tag／asset最終再照合は未実施 |
+| CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをowner UIで確認 |
+| default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 手順あり。default切替は未実施、復旧操作なし |
 
 これらが揃うまで Issue #14 を完了扱いにしません。
