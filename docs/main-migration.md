@@ -16,9 +16,10 @@ feature branchも実在するため「branchは26.2のみ」とは扱いませ�
 | [PR CI 40094910231](https://github.com/aktnb/stream-tweaks/actions/runs/40094910231) | PR head `6af0e2d4dd63456103389701c7abd6b877702a16`。test merge checkout SHAとは区別する | 両Loader build／JAR検証・共有test・format・script tests・CI OK成功 |
 | [merge後push CI 40095310540](https://github.com/aktnb/stream-tweaks/actions/runs/40095310540) | 実source `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` | 両Loader build／JAR検証・共有test・format・script tests・CI OK成功 |
 
-台帳の build 記録はこのmerge後sourceの実績です。今回の準備 PR head
-`8617d901317141aab8625b9fb01897a425f4df47` は [PR CI 40097096849](https://github.com/aktnb/stream-tweaks/actions/runs/40097096849)
+台帳の build 記録はこのmerge後sourceの実績です。runbookの今回の証拠追記前の準備 PR head
+`525f14996b7e1e52228fe11ecdfd17fdafa22d7a` は [PR CI 40097505222](https://github.com/aktnb/stream-tweaks/actions/runs/40097505222)
 が成功し、両Loader build／JAR検証・共有test・format・script tests・`CI OK` を含む全7 jobが成功しました。
+直前のhead `8617d901317141aab8625b9fb01897a425f4df47` も [PR CI 40097096849](https://github.com/aktnb/stream-tweaks/actions/runs/40097096849) が成功しています。
 runtime smoke は未確認のままです。
 
 本人 `aktnb` の repository 権限は admin ですが、接続 App の classic branch protection 読取は
@@ -27,7 +28,7 @@ runtime smoke は未確認のままです。
 管理者が正規の設定画面でclassic ruleの有無・設定を確認し、読取可能なruleset APIのreadbackと併せて記録します。
 
 ruleset `23603340`（Push Protection）はユーザー操作で一度disabledになった後、
-**2026-10-24 12:59 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
+**2026-10-24 13:29 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
 deletion / non_fast_forward 禁止と required_status_checks rule、bypassなしでした。
 ただし `required_status_checks=[]` で **CI OKが未追加**のため、必須checkの gate は未達です。
 `strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
@@ -41,8 +42,23 @@ deletion / non_fast_forward 禁止と required_status_checks rule、bypassなし
 全対象の [run 40096170430](https://github.com/aktnb/stream-tweaks/actions/runs/40096170430) は
 source SHA `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` のFabric／NeoForge両方を検証し、
 単一target `26.2-fabric` の [run 40096370197](https://github.com/aktnb/stream-tweaks/actions/runs/40096370197)
-も同じsource SHAで成功しました。Build の単target dispatch と Release の `prepare-new` は未実施です。
-`plan-new` も成功runがないため、切替前の公開なし計画／prepare gate は未達です。
+も同じsource SHAで成功しました。
+
+続いて、Build の [単一target dispatch run 40097553287](https://github.com/aktnb/stream-tweaks/actions/runs/40097553287)
+は `Use workflow from: 26.2`、source SHA `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d`、target `26.2-fabric` で成功し、
+Plan／script tests／format／shared tests／Fabric build／`CI OK` がすべて成功しました。
+Release の [公開なし prepare-new run 40097910669](https://github.com/aktnb/stream-tweaks/actions/runs/40097910669)
+も同じbranch／source SHAで成功しました。入力は beta `0.3.3-beta.1`、loaders `both` で、Fabric／NeoForge両targetの固定plan計算とbundle buildを実行しました。
+GitHub identity確認とGitHub draftへのbundle保存はこのoperationではskipされ、run logにもtag／publication／notificationを行わないことが記録されています。
+
+prepare-new artifactの照合結果:
+- plan artifact ID `12561219630` のarchive SHA256は `31eca05f4272947e9ca5b0d82553c921c943e0a3b7715bcbe1becb63ed5130e0`。
+  別artifactとbundle内にある `release-plan.json` のSHA256はどちらも `417604896a6c8ddc21a9d576ab6255c11291359375772a94c147742c829bac0a` です。
+- bundle artifact ID `12562205038` のarchive SHA256は `e39dae64663235c79022f82a26532668b7b9df97b6f86228cd3a8ce604e8bb59`。
+  bundle内 `release-manifest.json` のSHA256は `f564edb84ecd19871bb89dffff16a0787862380259e5004f3d50c48a37532553` で、2 LoaderのJARを含みます。
+- artifactを取得し、`release_bundle.py verify` をsource SHAと固定planに対して実行して成功しました。
+
+`plan-new` 自体はまだ成功runがありません。上記prepare-new内の固定plan計算は成功していますが、別operationである `plan-new` のUI実行を確認するまでは、切替前のplan gateは未達です。
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
