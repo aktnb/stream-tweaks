@@ -28,11 +28,12 @@ runtime smoke は未確認のままです。
 管理者が正規の設定画面でclassic ruleの有無・設定を確認し、読取可能なruleset APIのreadbackと併せて記録します。
 
 ruleset `23603340`（Push Protection）はユーザー操作で一度disabledになった後、
-**2026-10-24 13:29 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
-deletion / non_fast_forward 禁止と required_status_checks rule、bypassなしでした。
-ただし `required_status_checks=[]` で **CI OKが未追加**のため、必須checkの gate は未達です。
+**2026-10-24 13:31 UTCのreadback**ではactive、対象は `refs/heads/main` と `refs/heads/26.2`、
+deletion / non_fast_forward 禁止、bypassなしでした。必須status checkは
+`[{"context":"CI OK","integration_id":15368}]` と確認し、CI OKの必須化も反映されています。
 `strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
-この条件では準備merge後の同一source commitにCI OK成功が付くのを待ってからmainを作成します。
+接続Appからのclassic branch protection読取は引き続き `403 Resource not accessible by integration` のため、classic ruleの有無は未確認です。
+このrulesetのreadbackをもって、両branchでCI OKを必須にする設定を確認しました。main作成前にもreadbackを再確認します。
 
 2026-10-24 12:51 UTC時点のmatching-refs/tagsとRelease一覧は空で、進行中publishはありませんでした。
 `plan-new`（0.3.3-beta.1 / beta / both）のdispatch試行は
@@ -178,7 +179,7 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 | main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | 未実施 |
 | 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | 準備差分はmain予約。remote台帳切替・main作成は未実施 |
 | 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 先行一覧はTag／Releaseとも空。移行前後比較は未実施 |
-| CI OK必須と対象保護 | UI確認／rulesetの実設定readback | rulesetは両branch対象active、CI OK未追加。classic有無のUI確認待ち |
+| CI OK必須と対象保護 | ruleset実設定readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleの有無はAPI403で未確認 |
 | default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | runbookのみ、外部切替なし |
 
 これらが揃うまで Issue #14 を完了扱いにしません。
