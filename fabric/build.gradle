@@ -24,6 +24,9 @@ dependencies {
 
     implementation "com.google.code.gson:gson:${rootProject.gson_version}"
     implementation "com.electronwill.night-config:toml:${rootProject.nightconfig_version}"
+    // include is non-transitive: the client distribution needs both TOML and core.
+    include "com.electronwill.night-config:toml:${rootProject.nightconfig_version}"
+    include "com.electronwill.night-config:core:${rootProject.nightconfig_version}"
 }
 
 sourceSets {
@@ -43,11 +46,19 @@ sourceSets {
 }
 
 processResources {
-    inputs.property "version", project.version
+    def metadata = [
+            version: project.version,
+            minecraft_version: rootProject.minecraft_version,
+            fabric_loader_version: rootProject.fabric_loader_version,
+            java_version: rootProject.java_version]
+    inputs.properties(metadata)
     filteringCharset = "UTF-8"
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand(metadata)
+    }
+    filesMatching("stream-tweaks.mixins.json") {
+        expand(java_version: rootProject.java_version)
     }
 }
 

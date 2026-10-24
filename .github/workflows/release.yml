@@ -4,6 +4,54 @@ run-name: Release ${{ inputs.channel || 'manual' }} for ${{ github.ref_name }}
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: '計画/prepare→GitHub draft保管→同bundleをpublish（不足先のみ）'
+        type: choice
+        required: true
+        default: prepare-new
+        options:
+          - plan-new
+          - plan-reuse
+          - prepare-new
+          - github-stage
+          - github-resume
+          - publish
+      release_source_branch:
+        description: '再開する固定計画の元source branch（空欄は実行ref、main移行後も元の値を使う）'
+        type: string
+        required: false
+      curseforge_project:
+        description: '任意公開先の固定project ID（未設定ならGitHub/Modrinthのみ）'
+        type: string
+        required: false
+      curseforge_required:
+        description: '計画でCurseForge成功を必須にする（未指定なら任意先）'
+        type: boolean
+        default: false
+      release_minecraft:
+        description: 'github-*: 固定計画のMinecraft版'
+        type: string
+        required: false
+      source_sha:
+        description: 'github-*: prepare成功runのfull source SHA'
+        type: string
+        required: false
+      manifest_sha256:
+        description: 'github-*: prepare summaryに表示されたmanifest SHA256'
+        type: string
+        required: false
+      bundle_run_id:
+        description: 'github-stage: 成功したprepare-new run ID（PR artifact不可）'
+        type: string
+        required: false
+      release_version:
+        description: '計画用の純SemVer（例: 0.3.4-beta.1、プレ番号は固定）'
+        type: string
+        required: false
+      existing_plan_json:
+        description: 'plan-reuse専用: 保存済みplan JSON。現段階では公開入力に使用しない'
+        type: string
+        required: false
       channel:
         description: 'リリースチャンネル'
         type: choice
@@ -13,7 +61,7 @@ on:
           - beta
           - release
       loaders:
-        description: '公開するローダー（channel=release では both のみ）'
+        description: '固定するローダー集合（stable単Loaderも可、公開後追加不可）'
         type: choice
         required: true
         default: both
@@ -23,452 +71,372 @@ on:
           - neoforge
 
 concurrency:
-  # publish 途中のキャンセルによる中途半端なリリースを防ぐため cancel-in-progress は付けない
-  group: release-${{ github.ref }}
+  # New publication paths use explicit SemVer × MC, independent of main/maintenance ref names.
+  # The write job additionally locks the canonical validated tag across branch migrations.
+  group: release-${{ inputs.release_version || github.ref_name }}+mc${{ inputs.release_minecraft || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  release:
-    name: Build and publish
+  plan:
+    name: Compute fixed plan (no publication)
+    if: ${{ inputs.operation == 'plan-new' || inputs.operation == 'plan-reuse' || inputs.operation == 'prepare-new' }}
     runs-on: ubuntu-latest
-    permissions:
-      # タグ push と GitHub Release 作成のために必要
-      contents: write
-    outputs:
-      tag: ${{ steps.compute.outputs.tag }}
-      channel: ${{ steps.compute.outputs.channel }}
-      mc: ${{ steps.compute.outputs.mc }}
-      loaders: ${{ steps.compute.outputs.loaders }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-          persist-credentials: false
-
-      - id: setup-build
-        uses: ./.github/actions/setup-build
-
-      # ------------------------------------------------------------------
-      # 1. バージョン / タグ採番（この時点ではタグを push しない）
-      # ------------------------------------------------------------------
-      - id: compute
-        name: Compute release metadata
-        shell: bash
-        env:
-          CHANNEL_INPUT: ${{ inputs.channel }}
-          LOADERS_INPUT: ${{ inputs.loaders }}
-        run: |
-          set -euo pipefail
-
-          # --- 入力の allowlist 検証（type: choice に加えた多層防御）---
-          case "$CHANNEL_INPUT" in
-            alpha|beta|release) CHANNEL="$CHANNEL_INPUT" ;;
-            *) echo "channel の値が不正です"; exit 1 ;;
-          esac
-
-          case "$LOADERS_INPUT" in
-            both|fabric|neoforge) LOADERS="$LOADERS_INPUT" ;;
-            *) echo "loaders の値が不正です"; exit 1 ;;
-          esac
-
-          # release のタグは v<mod_version>+mc<mc> 固定なので、片方だけ公開すると
-          # もう片方を公開する2回目の実行で必ずタグが衝突する。
-          if [[ "$CHANNEL" == "release" && "$LOADERS" != "both" ]]; then
-            echo "channel=release では loaders=both のみ指定できます（タグが1系列固定のため）"
-            exit 1
-          fi
-
-          case "$LOADERS" in
-            both) LOADER_LIST="fabric,neoforge" ;;
-            *) LOADER_LIST="$LOADERS" ;;
-          esac
-
-          escape_regex() {
-            printf '%s' "$1" | sed -e 's/[.[\*^$()+?{|]/\\&/g'
-          }
-
-          # --- gradle.properties からバージョンを取得し、形式を厳密に検証する ---
-          MOD_VERSION="$(sed -nE 's/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' gradle.properties | head -n1)"
-          MC_VERSION="$(sed -nE 's/^[[:space:]]*minecraft_version[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' gradle.properties | head -n1)"
-
-          if ! [[ "$MOD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "gradle.properties の mod_version が不正です (取得値: '${MOD_VERSION}')"
-            exit 1
-          fi
-          if ! [[ "$MC_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "gradle.properties の minecraft_version が不正です (取得値: '${MC_VERSION}')"
-            exit 1
-          fi
-
-          # --- 実行ブランチがバージョンブランチであることを確認 ---
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          if ! [[ "$BRANCH" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-            echo "このワークフローはバージョンブランチ（例: 1.21.8, 26.2）上で実行してください。現在のブランチ: $BRANCH"
-            exit 1
-          fi
-          if [[ "$BRANCH" != "$MC_VERSION" ]]; then
-            echo "ブランチ名($BRANCH)と gradle.properties の minecraft_version($MC_VERSION) が一致しません"
-            exit 1
-          fi
-
-          MOD_VERSION_RE="$(escape_regex "$MOD_VERSION")"
-          MC_VERSION_RE="$(escape_regex "$MC_VERSION")"
-
-          # --- ローダー別に「そのローダーを公開した直近の到達可能タグ」を探す ---
-          # annotated tag のメッセージ2行目 'Loaders: fabric,neoforge' を厳格な正規表現で読む。
-          # マッチしないタグ（既存の lightweight タグなど）は「不明」= 両ローダー公開済みとみなす。
-          prev_tag_for_loader() {
-            local target="$1" tag loader_line
-            while IFS= read -r tag; do
-              loader_line="$(git tag -l --format='%(contents)' "$tag" \
-                | sed -nE 's/^Loaders: ((fabric|neoforge)(,(fabric|neoforge))*)$/\1/p' | head -n1)"
-              if [[ -z "$loader_line" || ",${loader_line}," == *",${target},"* ]]; then
-                printf '%s' "$tag"
-                return
-              fi
-            done < <(git tag --merged HEAD --sort=-creatordate --list "v*+mc${MC_VERSION}")
-          }
-
-          # 2つのタグのうち作成日時が古い方を返す（どちらかが空なら空 = Unreleased 全文）
-          older_tag() {
-            if [[ -z "$1" || -z "$2" ]]; then
-              return
-            fi
-            if [[ "$1" == "$2" ]]; then
-              printf '%s' "$1"
-              return
-            fi
-            git tag --sort=creatordate --list "$1" "$2" | head -n1
-          }
-
-          validate_tag_ref() {
-            if [[ -n "$1" && ! "$1" =~ ^v[0-9A-Za-z.+_,-]+$ ]]; then
-              echo "$2 として不正なタグ名を検出しました: '$1'"
-              exit 1
-            fi
-          }
-
-          PREV_TAG_FABRIC=""
-          PREV_TAG_NEOFORGE=""
-          PREV_TAG_COMBINED=""
-
-          if [[ "$CHANNEL" == "release" ]]; then
-            VERSION="$MOD_VERSION"
-            NEW_TAG="v${MOD_VERSION}+mc${MC_VERSION}"
-
-            if ! grep -qE "^## \[${MOD_VERSION_RE}\]" CHANGELOG.md; then
-              echo "CHANGELOG.md に '## [${MOD_VERSION}]' セクションが見つかりません。"
-              echo "先に release/${MOD_VERSION} ブランチで CHANGELOG.md を更新する PR をマージしてください。"
-              exit 1
-            fi
-          else
-            # 同じ mod_version + channel の中で連番を採番する（fabric/neoforge 共通の1系列）
-            LAST_NUM="$(git tag -l "v${MOD_VERSION}-${CHANNEL}.*+mc${MC_VERSION}" \
-              | sed -nE "s/^v${MOD_VERSION_RE}-${CHANNEL}\.([0-9]+)\+mc${MC_VERSION_RE}\$/\1/p" \
-              | sort -n | tail -n1)"
-            NEXT_NUM=$(( ${LAST_NUM:-0} + 1 ))
-            VERSION="${MOD_VERSION}-${CHANNEL}.${NEXT_NUM}"
-            NEW_TAG="v${VERSION}+mc${MC_VERSION}"
-
-            # リリースノートをローダーごとの前回タグからの差分にする
-            PREV_TAG_FABRIC="$(prev_tag_for_loader fabric)"
-            PREV_TAG_NEOFORGE="$(prev_tag_for_loader neoforge)"
-            case "$LOADERS" in
-              fabric) PREV_TAG_COMBINED="$PREV_TAG_FABRIC" ;;
-              neoforge) PREV_TAG_COMBINED="$PREV_TAG_NEOFORGE" ;;
-              # まとめノートは取りこぼしを防ぐため古い方の差分を使う
-              both) PREV_TAG_COMBINED="$(older_tag "$PREV_TAG_FABRIC" "$PREV_TAG_NEOFORGE")" ;;
-            esac
-          fi
-
-          validate_tag_ref "$PREV_TAG_FABRIC" "fabric の前回タグ"
-          validate_tag_ref "$PREV_TAG_NEOFORGE" "neoforge の前回タグ"
-          validate_tag_ref "$PREV_TAG_COMBINED" "まとめノート用の前回タグ"
-          validate_tag_ref "$NEW_TAG" "新規タグ"
-
-          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
-            echo "タグ $NEW_TAG は既に存在します"
-            exit 1
-          fi
-
-          FABRIC_JAR="fabric/build/libs/stream-tweaks-fabric-mc${MC_VERSION}-${VERSION}.jar"
-          NEOFORGE_JAR="neoforge/build/libs/stream-tweaks-neoforge-mc${MC_VERSION}-${VERSION}.jar"
-
-          RELEASE_FILES=""
-          if [[ "$LOADERS" == "both" || "$LOADERS" == "fabric" ]]; then
-            RELEASE_FILES="${RELEASE_FILES}${FABRIC_JAR}"$'\n'
-          fi
-          if [[ "$LOADERS" == "both" || "$LOADERS" == "neoforge" ]]; then
-            RELEASE_FILES="${RELEASE_FILES}${NEOFORGE_JAR}"$'\n'
-          fi
-
-          {
-            echo "tag=$NEW_TAG"
-            echo "version=$VERSION"
-            echo "mc=$MC_VERSION"
-            echo "channel=$CHANNEL"
-            echo "loaders=$LOADERS"
-            echo "loader_list=$LOADER_LIST"
-            echo "prev_tag_fabric=$PREV_TAG_FABRIC"
-            echo "prev_tag_neoforge=$PREV_TAG_NEOFORGE"
-            echo "prev_tag_combined=$PREV_TAG_COMBINED"
-            echo "fabric_jar=$FABRIC_JAR"
-            echo "neoforge_jar=$NEOFORGE_JAR"
-          } >> "$GITHUB_OUTPUT"
-
-          DELIM="STREAM_TWEAKS_$(openssl rand -hex 16)"
-          {
-            echo "release_files<<$DELIM"
-            printf '%s' "$RELEASE_FILES"
-            echo "$DELIM"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### 作成するタグ: \`$NEW_TAG\`"
-            echo "### 公開 loader: \`$LOADER_LIST\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ------------------------------------------------------------------
-      # 2. リリースノート生成（ローダー別 + まとめ）
-      # ------------------------------------------------------------------
-      - id: changelog
-        name: Prepare changelog notes
-        shell: bash
-        env:
-          MODE: ${{ steps.compute.outputs.channel }}
-          VERSION: ${{ steps.compute.outputs.version }}
-          LOADERS: ${{ steps.compute.outputs.loaders }}
-          LOADER_LIST: ${{ steps.compute.outputs.loader_list }}
-          PREV_TAG_FABRIC: ${{ steps.compute.outputs.prev_tag_fabric }}
-          PREV_TAG_NEOFORGE: ${{ steps.compute.outputs.prev_tag_neoforge }}
-          PREV_TAG_COMBINED: ${{ steps.compute.outputs.prev_tag_combined }}
-          NOTES_DIR: ${{ runner.temp }}/release-notes
-        run: |
-          set -euo pipefail
-
-          mkdir -p "$NOTES_DIR"
-
-          # $1: 出力ファイル / $2: --loaders の値 / $3: 差分の起点タグ（空可）
-          generate_notes() {
-            local out="$1" loaders_arg="$2" prev_tag="$3"
-            local since_args=()
-
-            if [[ "$MODE" == "release" ]]; then
-              python3 scripts/changelog_tool.py read \
-                --file CHANGELOG.md \
-                --version "$VERSION" \
-                --loaders "$loaders_arg" \
-                --notes-output "$out"
-              return
-            fi
-
-            if [[ -n "$prev_tag" ]]; then
-              echo "[$loaders_arg] 前回タグ: $prev_tag からの差分を生成します"
-              since_args=(--since-ref "$prev_tag")
-            else
-              echo "[$loaders_arg] 前回タグが見つからないため Unreleased 全文を使用します"
-            fi
-
-            python3 scripts/changelog_tool.py "$MODE" \
-              --file CHANGELOG.md \
-              --loaders "$loaders_arg" \
-              --notes-output "$out" \
-              "${since_args[@]}"
-          }
-
-          emit_output() {
-            local key="$1" file="$2" delim
-            delim="STREAM_TWEAKS_$(openssl rand -hex 16)"
-            {
-              echo "${key}<<${delim}"
-              cat "$file"
-              echo "$delim"
-            } >> "$GITHUB_OUTPUT"
-          }
-
-          if [[ "$LOADERS" == "both" || "$LOADERS" == "fabric" ]]; then
-            generate_notes "$NOTES_DIR/fabric.md" fabric "$PREV_TAG_FABRIC"
-            emit_output notes_fabric "$NOTES_DIR/fabric.md"
-          fi
-
-          if [[ "$LOADERS" == "both" || "$LOADERS" == "neoforge" ]]; then
-            generate_notes "$NOTES_DIR/neoforge.md" neoforge "$PREV_TAG_NEOFORGE"
-            emit_output notes_neoforge "$NOTES_DIR/neoforge.md"
-          fi
-
-          generate_notes "$NOTES_DIR/combined.md" "$LOADER_LIST" "$PREV_TAG_COMBINED"
-          emit_output notes_combined "$NOTES_DIR/combined.md"
-
-      - name: Upload release notes
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: release-notes-${{ github.run_id }}
-          path: ${{ runner.temp }}/release-notes
-          retention-days: 7
-
-      # ------------------------------------------------------------------
-      # 3. ビルド（タグ push より前に実行し、失敗してもタグを残さない）
-      # ------------------------------------------------------------------
-      - name: Build
-        shell: bash
-        env:
-          MOD_VERSION: ${{ steps.compute.outputs.version }}
-          LOADERS: ${{ steps.compute.outputs.loaders }}
-        run: |
-          set -euo pipefail
-
-          case "$LOADERS" in
-            both)
-              ./gradlew clean build --stacktrace "-Pmod_version=${MOD_VERSION}"
-              ;;
-            fabric)
-              ./gradlew clean :fabric:test :fabric:build --stacktrace "-Pmod_version=${MOD_VERSION}"
-              ;;
-            neoforge)
-              # 共通テストは現状 fabric サブプロジェクトの test タスクで実行する。
-              ./gradlew clean :fabric:test :neoforge:build --stacktrace "-Pmod_version=${MOD_VERSION}"
-              ;;
-            *)
-              echo "loaders の値が不正です: ${LOADERS}"
-              exit 1
-              ;;
-          esac
-
-      # ------------------------------------------------------------------
-      # 4. タグ作成 / push（ビルド成功後）
-      # ------------------------------------------------------------------
-      - name: Create and push annotated tag
-        shell: bash
-        env:
-          TAG: ${{ steps.compute.outputs.tag }}
-          LOADER_LIST: ${{ steps.compute.outputs.loader_list }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 認証に失敗したときに対話プロンプトで固まらせない
-          GIT_TERMINAL_PROMPT: '0'
-        run: |
-          set -euo pipefail
-
-          # タグメッセージは「どのローダーを公開したか」だけを機械可読な形で残す。
-          # changelog 本文は含めない（自由入力が Loaders: 行のパースを汚染しうるため）。
-          MESSAGE_FILE="$RUNNER_TEMP/tag-message.txt"
-          printf 'Release %s\nLoaders: %s\n' "$TAG" "$LOADER_LIST" > "$MESSAGE_FILE"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # checkout は persist-credentials: false のため、push のときだけ token を渡す
-          git config credential.helper '!f() { printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f'
-
-          git tag -a "$TAG" -F "$MESSAGE_FILE"
-          git push origin "refs/tags/${TAG}"
-
-      # ------------------------------------------------------------------
-      # 5. 公開
-      # ------------------------------------------------------------------
-      # Modrinth の version は loaders 属性を持つため、Fabric / NeoForge を1つの
-      # version にまとめない（まとめると Fabric ユーザーが NeoForge jar を掴める）。
-      - name: Publish Fabric to Modrinth (mc-publish)
-        if: ${{ steps.compute.outputs.loaders == 'both' || steps.compute.outputs.loaders == 'fabric' }}
-        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
-        with:
-          modrinth-id: jWHdryID
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-
-          name: Stream Tweaks ${{ steps.compute.outputs.tag }} (Fabric)
-          version: ${{ steps.compute.outputs.tag }}-fabric
-          version-type: ${{ steps.compute.outputs.channel }}
-
-          loaders: fabric
-          game-versions: ${{ steps.compute.outputs.mc }}
-          java: ${{ steps.setup-build.outputs.java-version }}
-
-          files: ${{ steps.compute.outputs.fabric_jar }}
-
-          changelog: ${{ steps.changelog.outputs.notes_fabric }}
-
-      - name: Publish NeoForge to Modrinth (mc-publish)
-        if: ${{ steps.compute.outputs.loaders == 'both' || steps.compute.outputs.loaders == 'neoforge' }}
-        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
-        with:
-          modrinth-id: jWHdryID
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-
-          name: Stream Tweaks ${{ steps.compute.outputs.tag }} (NeoForge)
-          version: ${{ steps.compute.outputs.tag }}-neoforge
-          version-type: ${{ steps.compute.outputs.channel }}
-
-          loaders: neoforge
-          game-versions: ${{ steps.compute.outputs.mc }}
-          java: ${{ steps.setup-build.outputs.java-version }}
-
-          files: ${{ steps.compute.outputs.neoforge_jar }}
-
-          changelog: ${{ steps.changelog.outputs.notes_neoforge }}
-
-      # GitHub Release は1タグ1リリースなので、選択したローダーの jar をまとめて添付する
-      - name: Publish to GitHub Release (mc-publish)
-        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
-        with:
-          name: Stream Tweaks ${{ steps.compute.outputs.tag }}
-          version: ${{ steps.compute.outputs.tag }}
-          version-type: ${{ steps.compute.outputs.channel }}
-
-          files: ${{ steps.compute.outputs.release_files }}
-
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          github-tag: ${{ steps.compute.outputs.tag }}
-          github-prerelease: ${{ steps.compute.outputs.channel != 'release' }}
-          github-draft: false
-          changelog: ${{ steps.changelog.outputs.notes_combined }}
-
-  notify:
-    name: Notify Discord
-    runs-on: ubuntu-latest
-    needs: [release]
-    if: ${{ !cancelled() }}
     permissions:
       contents: read
-    env:
-      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    outputs:
+      source-sha: ${{ steps.fixed-plan.outputs.source-sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - name: Download release notes
-        if: ${{ needs.release.result == 'success' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: release-notes-${{ github.run_id }}
-          path: ${{ runner.temp }}/release-notes
-
-      - name: Send Discord notification
-        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+      - id: fixed-plan
+        name: Compute or verify explicit plan
         shell: bash
         env:
-          RELEASE_RESULT: ${{ needs.release.result }}
-          CHANNEL: ${{ needs.release.outputs.channel }}
-          TAG: ${{ needs.release.outputs.tag }}
-          MC_VERSION: ${{ needs.release.outputs.mc }}
-          LOADERS: ${{ needs.release.outputs.loaders }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          NOTES_FILE: ${{ runner.temp }}/release-notes/combined.md
+          OPERATION: ${{ inputs.operation }}
+          VERSION: ${{ inputs.release_version }}
+          CHANNEL: ${{ inputs.channel }}
+          LOADERS: ${{ inputs.loaders }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+          EXISTING_PLAN_JSON: ${{ inputs.existing_plan_json }}
+          CURSEFORGE_PROJECT: ${{ inputs.curseforge_project }}
+          CURSEFORGE_REQUIRED: ${{ inputs.curseforge_required }}
         run: |
           set -euo pipefail
-
-          if [[ "$RELEASE_RESULT" == "success" ]]; then
-            STATUS="success"
-          else
-            STATUS="failure"
+          case "$OPERATION" in
+            plan-new|prepare-new) MODE=new ;;
+            plan-reuse) MODE=reuse ;;
+            *) exit 1 ;;
+          esac
+          case "$LOADERS" in
+            both) LOADER_ARGS=(--loader fabric --loader neoforge) ;;
+            fabric|neoforge) LOADER_ARGS=(--loader "$LOADERS") ;;
+            *) exit 1 ;;
+          esac
+          MC_VERSION="$(sed -nE 's/^minecraft_version=([^[:space:]#]+).*$/\1/p' gradle.properties)"
+          PLAN_ARGS=("$MODE" --version "$VERSION" --minecraft "$MC_VERSION" --channel "$CHANNEL"
+            --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA"
+            --properties gradle.properties "${LOADER_ARGS[@]}" --output "$RUNNER_TEMP/release-plan.json")
+          if [[ -n "$CURSEFORGE_PROJECT" ]]; then PLAN_ARGS+=(--curseforge-project "$CURSEFORGE_PROJECT"); fi
+          if [[ "$CURSEFORGE_REQUIRED" == true ]]; then PLAN_ARGS+=(--curseforge-required); fi
+          if [[ "$MODE" == reuse ]]; then
+            python3 -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "existing-plan.json").write_text(os.environ["EXISTING_PLAN_JSON"], encoding="utf-8")'
+            PLAN_ARGS+=(--existing "$RUNNER_TEMP/existing-plan.json")
+          elif [[ -n "$EXISTING_PLAN_JSON" ]]; then
+            echo "新規計画では existing_plan_json を指定できません"
+            exit 1
           fi
+          python3 scripts/release_plan.py "${PLAN_ARGS[@]}"
+          printf 'source-sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo '固定計画を検証しました。このjobではbuild/tag/publication/通知を実行していません。' >> "$GITHUB_STEP_SUMMARY"
 
-          python3 scripts/notify_discord.py \
-            --status "$STATUS" \
-            --channel "$CHANNEL" \
-            --tag "$TAG" \
-            --mc "$MC_VERSION" \
-            --loaders "$LOADERS" \
-            --run-url "$RUN_URL" \
-            --notes-file "$NOTES_FILE"
+      - name: Save fixed plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-plan-${{ github.run_id }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-plan.json
+          retention-days: 7
+
+  bundle-build:
+    name: Build immutable release bundle (no publication)
+    if: ${{ inputs.operation == 'prepare-new' }}
+    needs: [plan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      manifest-sha256: ${{ steps.bundle.outputs.manifest-sha256 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.plan.outputs.source-sha }}
+          persist-credentials: false
+
+      - name: Download this run's fixed plan
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-plan-${{ github.run_id }}-${{ github.sha }}
+          path: ${{ runner.temp }}/fixed-plan
+
+      - uses: ./.github/actions/setup-build
+
+      - id: build-inputs
+        name: Validate fixed checkout and build inputs
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          git diff --exit-code
+          python3 - <<'PY'
+          import os, pathlib, sys
+          sys.path.insert(0, 'scripts')
+          import release_plan
+          plan = release_plan.load_plan(pathlib.Path(os.environ['RUNNER_TEMP']) / 'fixed-plan/release-plan.json')
+          if plan['source_sha'] != os.environ['EXPECTED_SOURCE_SHA']:
+              raise SystemExit('Fixed plan source SHA mismatch')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
+              stream.write('version=' + plan['mod_version'] + '\n')
+              stream.write('loaders=' + ','.join(row['loader'] for row in plan['targets']) + '\n')
+          PY
+
+      - name: Build and check every selected target, then record resolved inputs
+        shell: bash
+        env:
+          VERSION: ${{ steps.build-inputs.outputs.version }}
+          LOADERS: ${{ steps.build-inputs.outputs.loaders }}
+        run: |
+          set -euo pipefail
+          case "$LOADERS" in
+            fabric) BUILD_TASKS=(:fabric:build) ;;
+            neoforge) BUILD_TASKS=(:neoforge:build) ;;
+            fabric,neoforge) BUILD_TASKS=(:fabric:build :neoforge:build) ;;
+            *) exit 1 ;;
+          esac
+          # One task graph deduplicates :fabric:test even when :fabric:build also requires it.
+          ./gradlew clean :fabric:test "${BUILD_TASKS[@]}" writeReleaseProvenance \
+            -I scripts/release-provenance.gradle --dependency-verification=strict --stacktrace \
+            "-Pmod_version=$VERSION" "-PreleaseLoaders=$LOADERS" \
+            "-PreleaseProvenanceOutput=$RUNNER_TEMP/resolved-provenance.json"
+
+      - id: bundle
+        name: Validate JARs and save immutable bundle
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_bundle.py create \
+            --plan "$RUNNER_TEMP/fixed-plan/release-plan.json" --source-sha "$EXPECTED_SOURCE_SHA" \
+            --resolved-provenance "$RUNNER_TEMP/resolved-provenance.json" \
+            --output "$RUNNER_TEMP/release-bundle" --run-id "$RELEASE_RUN_ID" \
+            --run-attempt "$RELEASE_RUN_ATTEMPT" --repository "$RELEASE_REPOSITORY" \
+            > "$RUNNER_TEMP/bundle-create-result.json"
+          python3 scripts/release_bundle.py verify \
+            --bundle "$RUNNER_TEMP/release-bundle" --source-sha "$EXPECTED_SOURCE_SHA" \
+            --plan "$RUNNER_TEMP/fixed-plan/release-plan.json" > "$RUNNER_TEMP/bundle-verify-result.json"
+          python3 - <<'PY'
+          import hashlib, os, pathlib
+          manifest = pathlib.Path(os.environ['RUNNER_TEMP']) / 'release-bundle/release-manifest.json'
+          digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
+              stream.write('manifest-sha256=' + digest + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as stream:
+              stream.write('Bundle verified; no tag/publication/notification. Manifest SHA256: `' + digest + '`\n')
+          PY
+
+      - name: Save validated bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-bundle-${{ github.run_id }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-bundle
+          if-no-files-found: error
+          retention-days: 30
+
+  github-inputs:
+    name: Verify GitHub staging identity (read only)
+    if: ${{ inputs.operation == 'github-stage' || inputs.operation == 'github-resume' || inputs.operation == 'publish' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - id: identity
+        name: Validate immutable publication inputs
+        shell: bash
+        env:
+          OPERATION: ${{ inputs.operation }}
+          VERSION: ${{ inputs.release_version }}
+          MC: ${{ inputs.release_minecraft }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          CHANNEL: ${{ inputs.channel }}
+          LOADERS: ${{ inputs.loaders }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          BUNDLE_RUN_ID: ${{ inputs.bundle_run_id }}
+          ORIGINAL_SOURCE_BRANCH: ${{ inputs.release_source_branch }}
+          CURSEFORGE_PROJECT: ${{ inputs.curseforge_project }}
+          CURSEFORGE_REQUIRED: ${{ inputs.curseforge_required }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+          sys.path.insert(0, 'scripts')
+          import publish_github as gh, release_plan as rp, validate_targets as vt
+          env = os.environ
+          if re.fullmatch('[0-9a-f]{64}', env['MANIFEST_SHA256']) is None:
+              raise SystemExit('Explicit trusted manifest SHA256 required')
+          loaders = ['fabric', 'neoforge'] if env['LOADERS'] == 'both' else [env['LOADERS']]
+          # Stored-plan reuse must survive catalog/default-branch migration. Only prepare-new resolves catalog.
+          identity = dict(version=env['VERSION'], minecraft=env['MC'], channel=env['CHANNEL'],
+              source_branch=env['ORIGINAL_SOURCE_BRANCH'] or env['SOURCE_BRANCH'], source_sha=env['SOURCE_SHA'],
+              loaders=rp.normalize_loaders(loaders), curseforge_project=env['CURSEFORGE_PROJECT'] or None,
+              curseforge_required=env['CURSEFORGE_REQUIRED'] == 'true')
+          tag = rp.validate_identity(**{k: identity[k] for k in ['version', 'minecraft', 'channel', 'source_branch', 'source_sha']})
+          rp.destinations(identity['curseforge_project'], identity['curseforge_required'])
+          if env['OPERATION'] == 'github-stage':
+              run = gh.validate_build_run(gh.GitHubClient(env['GITHUB_TOKEN']), env['BUNDLE_RUN_ID'], env['SOURCE_SHA'])
+              if run['head_branch'] != identity['source_branch']:
+                  raise SystemExit('Build source branch mismatch')
+          elif env['BUNDLE_RUN_ID']:
+              raise SystemExit('Resume reads durable bundle, not another build run')
+          import json
+          (pathlib.Path(env['RUNNER_TEMP']) / 'github-requested-identity.json').write_text(json.dumps(identity))
+          with open(env['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write('tag=' + tag + '\n')
+          PY
+      - name: Save expected immutable identity
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: github-expected-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/github-requested-identity.json
+          if-no-files-found: error
+          retention-days: 7
+
+  github-stage:
+    name: Store/recover verified bundle in GitHub draft
+    needs: [github-inputs]
+    if: ${{ inputs.operation == 'github-stage' || inputs.operation == 'github-resume' || inputs.operation == 'publish' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: release-${{ needs.github-inputs.outputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Download expected identity from this run
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: github-expected-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/expected
+      - name: Download original verified build artifact
+        if: ${{ inputs.operation == 'github-stage' }}
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-bundle-${{ inputs.bundle_run_id }}-${{ inputs.source_sha }}
+          run-id: ${{ inputs.bundle_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/github-bundle
+      - name: Restore durable bundle without building
+        if: ${{ inputs.operation == 'github-resume' || inputs.operation == 'publish' }}
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          TAG: ${{ needs.github-inputs.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_github.py restore --tag "$TAG" --source-sha "$SOURCE_SHA" \
+            --manifest-sha256 "$MANIFEST_SHA256" --output "$RUNNER_TEMP/github-bundle" \
+            > "$RUNNER_TEMP/github-restore-result.json"
+      - name: Verify entire durable bundle and stage missing assets only
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          BUNDLE_RUN_ID: ${{ inputs.bundle_run_id }}
+          OPERATION: ${{ inputs.operation }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_bundle.py verify --bundle "$RUNNER_TEMP/github-bundle" \
+            --source-sha "$SOURCE_SHA" --manifest-sha256 "$MANIFEST_SHA256" > "$RUNNER_TEMP/github-verify-result.json"
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, 'scripts')
+          import release_plan as rp
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          manifest = json.loads((root / 'github-bundle/release-manifest.json').read_text())
+          identity = json.loads((root / 'expected/github-requested-identity.json').read_text())
+          plan = rp.reuse_plan(manifest['plan'], **identity)
+          (root / 'expected/github-expected-plan.json').write_text(rp.canonical_json(plan))
+          if os.environ['OPERATION'] == 'github-stage':
+              if manifest['provenance']['workflow']['run_id'] != os.environ['BUNDLE_RUN_ID']:
+                  raise SystemExit('Bundle provenance run mismatch')
+          PY
+          python3 scripts/publish_github.py stage --bundle "$RUNNER_TEMP/github-bundle" \
+            --source-sha "$SOURCE_SHA" --manifest-sha256 "$MANIFEST_SHA256" \
+            --plan "$RUNNER_TEMP/expected/github-expected-plan.json" \
+            --state-output "$RUNNER_TEMP/publish-state.json" > "$RUNNER_TEMP/github-stage-result.json"
+          echo 'Verified durable GitHub bundle; Release remains draft until every required destination succeeds.' >> "$GITHUB_STEP_SUMMARY"
+      - id: publish
+        name: Reconcile missing destinations and finalize verified release
+        if: ${{ inputs.operation == 'publish' }}
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_modrinth.py publish --bundle "$RUNNER_TEMP/github-bundle" \
+            --source-sha "$SOURCE_SHA" --manifest-sha256 "$MANIFEST_SHA256" \
+            --state-output "$RUNNER_TEMP/publish-state.json" > "$RUNNER_TEMP/publish-result.json"
+      - name: Notify completed publication
+        if: ${{ inputs.operation == 'publish' && steps.publish.outcome == 'success' }}
+        shell: bash
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DISCORD_WEBHOOK_URL" ]]; then exit 0; fi
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, sys
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          result = json.loads((root / 'publish-result.json').read_text())
+          if result['github']['status'] != 'published':
+              raise SystemExit('Release is not finalized')
+          plan = json.loads((root / 'github-bundle/release-plan.json').read_text())
+          subprocess.run([sys.executable, 'scripts/notify_discord.py', '--status', 'success', '--channel', plan['channel'],
+              '--tag', plan['tag'], '--mc', plan['minecraft'], '--loaders', ','.join(t['loader'] for t in plan['targets']),
+              '--notes-file', str(root / 'github-bundle/notes-combined.md'), '--run-url', os.environ['RUN_URL']], check=True)
+          PY
+      - name: Summarize publication state
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          state = pathlib.Path(os.environ['RUNNER_TEMP']) / 'publish-state.json'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              if not state.exists():
+                  summary.write('Publication stopped before a state snapshot was available.\n')
+              else:
+                  value = json.loads(state.read_text())
+                  summary.write('GitHub: ' + value['github']['status'] + '\n')
+                  for target, destinations in value.get('targets', {}).items():
+                      for name, receipt in destinations.items():
+                          summary.write(target + ' / ' + name + ': ' + receipt['status'] + '\n')
+          PY
+      - name: Save separate publication state
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: publish-state-${{ github.run_id }}
+          path: ${{ runner.temp }}/publish-state.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,0 +1,60 @@
+// Invoked only after the selected release build/check tasks have succeeded.
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+
+gradle.projectsEvaluated {
+    rootProject.tasks.register('writeReleaseProvenance') {
+        // Explicit ordering is required when Gradle runs independent projects in parallel.
+        mustRunAfter ':fabric:test', ':fabric:build', ':neoforge:build'
+        doLast {
+            def loaders = rootProject.property('releaseLoaders').split(',').toList().sort()
+            if (!loaders || !loaders.every { it in ['fabric', 'neoforge'] }) {
+                throw new GradleException('Invalid releaseLoaders')
+            }
+            def checkedTasks = [rootProject.project(':fabric').tasks.named('test').get()]
+            loaders.each { loader ->
+                ['build', 'check'].each { name -> checkedTasks << rootProject.project(":${loader}").tasks.named(name).get() }
+            }
+            checkedTasks.each { task ->
+                if (!task.state.executed || task.state.failure != null || (task.state.skipped && !task.state.upToDate)) {
+                    throw new GradleException("Release gate did not succeed: ${task.path}")
+                }
+            }
+            def compilers = loaders.collect { loader ->
+                def metadata = rootProject.project(":${loader}").tasks.named('compileJava').get().javaCompiler.get().metadata
+                [major: metadata.languageVersion.asInt(), runtime: metadata.javaRuntimeVersion, vendor: metadata.vendor]
+            }.unique()
+            if (compilers.size() != 1) throw new GradleException('Selected targets use different Java toolchains')
+            def dependencies = []
+            loaders.each { loader ->
+                def target = rootProject.project(":${loader}")
+                ['compileClasspath', 'runtimeClasspath'].each { name ->
+                    def configuration = target.configurations.getByName(name)
+                    configuration.resolvedConfiguration.rethrowFailure()
+                    configuration.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                        def digest = MessageDigest.getInstance('SHA-256')
+                        artifact.file.withInputStream { input ->
+                            byte[] buffer = new byte[65536]
+                            int count
+                            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count)
+                        }
+                        dependencies << [loader: loader, configuration: name,
+                            module: artifact.moduleVersion.id.toString(), filename: artifact.file.name,
+                            sha256: digest.digest().encodeHex().toString()]
+                    }
+                }
+            }
+            def result = [gradle_version: gradle.gradleVersion,
+                build_checks: checkedTasks.collect { it.path }.unique().sort(),
+                java: compilers[0],
+                gradle_jvm: [major: Runtime.version().feature(), runtime: System.getProperty('java.runtime.version'),
+                    vendor: System.getProperty('java.vendor')],
+                dependencies: dependencies.sort { a, b ->
+                    "${a.loader}:${a.configuration}:${a.module}:${a.filename}" <=>
+                        "${b.loader}:${b.configuration}:${b.module}:${b.filename}"
+                }]
+            def destination = new File(rootProject.property('releaseProvenanceOutput').toString())
+            destination.text = JsonOutput.prettyPrint(JsonOutput.toJson(result)) + '\n'
+        }
+    }
+}

@@ -1,0 +1,136 @@
+name: Validate supported targets
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'all or comma-separated supported target IDs'
+        required: true
+        default: all
+        type: string
+
+concurrency:
+  group: validate-supported-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Freeze supported source SHAs
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.resolve.outputs.groups }}
+      builds: ${{ steps.resolve.outputs.builds }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - id: resolve
+        env:
+          REQUESTED_TARGETS: ${{ inputs.targets || 'all' }}
+          CATALOG_SHA: ${{ github.sha }}
+          CONTROLLER_BRANCH: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          selection=()
+          if [[ "$REQUESTED_TARGETS" == all ]]; then
+            selection=(--all-supported)
+          else
+            IFS=',' read -r -a targets <<< "$REQUESTED_TARGETS"
+            # Preserve empty IDs, including a trailing comma, as invalid input.
+            if [[ -z "$REQUESTED_TARGETS" || "$REQUESTED_TARGETS" == *, ]]; then exit 1; fi
+            for target in "${targets[@]}"; do selection+=(--target "$target"); done
+          fi
+          python3 scripts/resolve_targets.py "${selection[@]}" \
+            --catalog-sha "$CATALOG_SHA" --controller-branch "$CONTROLLER_BRANCH" \
+            --repository "$GITHUB_REPOSITORY" --output resolved-targets.json \
+            --github-output "$GITHUB_OUTPUT" --summary "$GITHUB_STEP_SUMMARY"
+      - name: Save fixed resolution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: validation-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: resolved-targets.json
+          if-no-files-found: error
+          retention-days: 30
+
+  format:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.groups) }}
+    uses: ./.github/workflows/target-build.yml
+    with:
+      source-plan: ${{ matrix.source_plan }}
+      target: ${{ matrix.target }}
+      mode: format
+
+  test:
+    name: Shared tests ${{ matrix.target }}
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.groups) }}
+    uses: ./.github/workflows/target-build.yml
+    with:
+      source-plan: ${{ matrix.source_plan }}
+      target: ${{ matrix.target }}
+      mode: test
+
+  script-tests:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.groups) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ fromJSON(matrix.source_plan).validation_source_sha }}
+          persist-credentials: false
+      - name: Compile and test target scripts
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q scripts
+          python3 -m unittest discover scripts/tests
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.builds) }}
+    uses: ./.github/workflows/target-build.yml
+    with:
+      source-plan: ${{ matrix.source_plan }}
+      target: ${{ matrix.target }}
+      mode: build
+
+  validation-ok:
+    name: All supported targets OK
+    if: always()
+    needs: [resolve, format, test, script-tests, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected source and target
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          results = json.loads(os.environ['RESULTS'])
+          expected = {'resolve', 'format', 'test', 'script-tests', 'build'}
+          if set(results) != expected:
+              raise SystemExit('Unexpected validation jobs')
+          with pathlib.Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write('## 全対象検証の集約結果\n\n')
+              summary.write('行別結果と実JDK/cache/timeは各Target build summaryを参照。\n\n')
+              for name, job in sorted(results.items()):
+                  summary.write(f"- {name}: {job['result']}\n")
+          if any(job['result'] != 'success' for job in results.values()):
+              raise SystemExit('A required source or target failed, was cancelled, or was skipped')
+          PY
