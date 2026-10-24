@@ -2,13 +2,25 @@ plugins {
     id 'base'
     id 'checkstyle'
     id 'com.diffplug.spotless' version '7.2.1' apply false
-    id 'net.fabricmc.fabric-loom' version '1.16-SNAPSHOT' apply false
+    id 'net.fabricmc.fabric-loom' version '1.17.21' apply false
     id 'net.neoforged.moddev' version '2.0.142' apply false
 }
 
 allprojects {
     group = rootProject.maven_group
     version = rootProject.mod_version
+
+    configurations.configureEach {
+        resolutionStrategy {
+            failOnChangingVersions()
+            failOnDynamicVersions()
+        }
+    }
+
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
 }
 
 subprojects {

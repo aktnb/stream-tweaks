@@ -32,6 +32,7 @@ processResources {
             "neoforge_mod_id": rootProject.neoforge_mod_id,
             "mod_name": rootProject.mod_name,
             "mod_version": project.version,
+            "java_version": rootProject.java_version,
             "neoforge_version": rootProject.neoforge_version)
     filteringCharset = "UTF-8"
 
@@ -41,7 +42,11 @@ processResources {
                 "neoforge_mod_id": rootProject.neoforge_mod_id,
                 "mod_name": rootProject.mod_name,
                 "mod_version": project.version,
+                "java_version": rootProject.java_version,
                 "neoforge_version": rootProject.neoforge_version)
+    }
+    filesMatching("stream-tweaks.mixins.json") {
+        expand(java_version: rootProject.java_version)
     }
 }
 

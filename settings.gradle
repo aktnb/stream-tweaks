@@ -1,4 +1,14 @@
 pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            def version = requested.version
+            if (version != null && (version.toUpperCase().contains('SNAPSHOT')
+                    || version.contains('+') || version.startsWith('latest.')
+                    || version.contains('[') || version.contains('('))) {
+                throw new GradleException("Plugin version must be immutable: ${requested}")
+            }
+        }
+    }
     repositories {
         maven {
             name = 'Fabric'

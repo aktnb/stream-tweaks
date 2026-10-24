@@ -4,23 +4,35 @@
 - 回答は必ず日本語で行ってください。
 
 ## プロジェクト概要
-- Stream Tweaks は Fabric Loom を用いた Minecraft 1.21.8 向けクライアント専用 Mod です。
+- Stream Tweaks は Minecraft 26.2 / Java 25 向けクライアント専用 Mod です（実際の値は `gradle.properties`）。
+- `settings.gradle` は `fabric` / `neoforge` の2サブプロジェクトを含み、Fabric Loom / ModDevGradle を使います。
 - Twitch の OAuth・Helix API・EventSub WebSocket を組み合わせて、Minecraft 内チャットへ Twitch コメントを転送します。
 - 現在の実装は `application` / `presentation` / `twitch/*` に責務を分離した構成です。
-- 主な依存関係は Fabric API、Gson、Java 21 標準ライブラリ (`java.net.http` など) です。
+- 主な依存関係は Fabric API / NeoForge、Gson、NightConfig、Java 標準ライブラリ (`java.net.http` など) です。
+- 対応・保守の ADR は `docs/support-policy.md`、公開契約・版番号の ADR は `docs/versioning.md` を参照してください。
+- Active 1 MC + Maintenance 最大1 MC、Loader 別ブランチなし。現在は `26.2`、main 導入後は main を唯一の Active 公開元とします。
+- feature / backport ブランチから対象別 PR / CI を使い、共通修正の移植は `cherry-pick -x` で追跡します。
+- ルート共通 sourceSet にも MC 依存コードがあります。MC 非依存業務ロジックと区別してください。
 
 ## ソース構成
-- `src/main/java/org/etwas/streamtweaks/mod/StreamTweaks.java`
-  - 共通エントリポイントです。`MOD_ID` と共通ロガー、開発時のみ出力する `devLogger` を提供します。
-- `src/main/java/org/etwas/streamtweaks/mod/StreamTweaksClient.java`
-  - クライアント初期化処理です。認証、API クライアント、EventSub、コマンド登録を配線します。
-  - EventSub 通知を受け取り、Minecraft のチャットスレッドへメッセージ表示を戻します。
+- `src/main/java/org/etwas/streamtweaks/mod/StreamTweaksCommon.java`
+  - 共通の `MOD_ID` と `LOGGER` を提供します。
+- `src/main/java/org/etwas/streamtweaks/mod/TwitchClientBootstrap.java`
+  - 認証、API クライアント、EventSub、チャット表示、終了処理、コマンド登録を配線する共通コンポジションルートです。
+- `src/main/java/org/etwas/streamtweaks/mod/platform/ClientPlatform.java`, `TwitchCommandRegistrar.java`
+  - 設定ディレクトリ、クライアントスレッド・ライフサイクル、コマンド登録の Loader 境界です。
+- `fabric/src/main/java/org/etwas/streamtweaks/mod/StreamTweaks.java`, `StreamTweaksClient.java`
+  - Fabric エントリポイントです。Fabric 実装は同ディレクトリの `fabric/` にあります。
+- `neoforge/src/main/java/org/etwas/streamtweaks/mod/neoforge/NeoForgeStreamTweaksClient.java`
+  - NeoForge のクライアント専用エントリポイントです。platform / command 実装も同パッケージにあります。
+- `fabric/src/main/resources/fabric.mod.json`, `neoforge/src/main/resources/META-INF/neoforge.mods.toml`
+  - 各 Loader の Mod metadata です。
 - `src/main/java/org/etwas/streamtweaks/application/TwitchApplicationService.java`
   - アプリケーションサービス層です。
   - `login` / `connect` / `disconnect` / `logout` を公開し、購読中ログイン名の集合を管理します。
 - `src/main/java/org/etwas/streamtweaks/presentation/commands/TwitchCommand.java`
   - `/twitch` クライアントコマンドを実装します。
-  - `login` / `connect <login>` / `disconnect <login>` / `logout` を登録します。
+  - `login` / `connect <login>` / `disconnect <login>` / `logout` / `config` を登録します。
 - `src/main/java/org/etwas/streamtweaks/twitch/auth`
   - OAuth 認証周辺です。
   - `AuthenticationOrchestrator` が認証開始、state 検証、トークン検証、資格情報保存、ログアウトを管理します。
@@ -30,10 +42,10 @@
   - `LocalCallbackServer` が `http://localhost:7654/callback` と `/callback/consume` を受けます。
   - `FileTwitchCredentialRepository` が `config/stream-tweaks/twitch-credentials.json` に資格情報を保存します。
   - `TokenValidateViaApi` が Twitch の validate API でトークン検証を行います。
-- `src/main/java/org/etwas/streamtweaks/twitch/common`
+- `src/main/java/org/etwas/streamtweaks/twitch/core`
   - Twitch API 共通モデルと定数です。
-  - `Login` / `UserId` / `AccessToken` などの値オブジェクトを持ちます。
-- `src/main/java/org/etwas/streamtweaks/twitch/common/infra/TwitchApiClientImpl.java`
+  - `Login` / `UserId` などの値オブジェクトを持ちます。`AccessToken` は `twitch/auth` にあります。
+- `src/main/java/org/etwas/streamtweaks/twitch/core/infra/TwitchApiClientImpl.java`
   - Helix `Get Users` を呼び出し、ログイン名から `UserId` を解決します。
   - 認証切れ時は再ログインを促す例外を返します。
 - `src/main/java/org/etwas/streamtweaks/twitch/subscription`
@@ -68,6 +80,8 @@
   - 候補補完は `TwitchApplicationService#getSubscribedLogins()` を使います。
 - `/twitch logout`
   - 全購読を解除してから資格情報を削除します。
+- `/twitch config`
+  - クライアント設定画面を開きます。
 - 非同期処理の完了・失敗は Minecraft チャットへ翻訳済みメッセージで通知します。
 
 ## 認証と資格情報
@@ -83,21 +97,21 @@
 - `EventSubOrchestrator#subscribe` は必要時のみ WebSocket 接続を確立し、接続後に購読差分を reconcile します。
 - WebSocket 切断・再接続時は actual 状態を破棄し、新しい `SessionId` で再同期します。
 - `revocation` 受信時は該当購読を registry から除去し、接続中であれば再購読を試みます。
-- 受信した `channel.chat.message` は `StreamTweaksClient` で `[Twitch] <user>: <message>` として表示します。
-- Minecraft へのメッセージ表示は `MinecraftClient#execute` でクライアントスレッドへ戻してから行ってください。
+- 受信通知は `presentation/chat/twitch/EventSubNotificationRouter` から各 presenter に渡し、チャット表示・削除を処理します。
+- Minecraft へのメッセージ表示は `ClientPlatform#executeOnClientThread` / `Minecraft#execute` でクライアントスレッドへ戻してください。
 
 ## ビルド / 実行 / 品質チェック
 - Gradle の主要タスク:
   - `./gradlew build` : コンパイル、テスト、Spotless/Checkstyle を含む検証、JAR 出力
-  - `./gradlew test` : JUnit 5 テスト実行
+  - `./gradlew :fabric:test` : ルート `src/test/java` の JUnit 5 テストを1回実行（一部は MC 依存）
   - `./gradlew check` : 品質チェック実行
   - `./gradlew spotlessApply` または `./gradlew format` : ソース整形
-  - `./gradlew runClient` : 開発用クライアント起動
-  - `./gradlew runServer` : 開発用サーバー起動
-  - `./gradlew genSources` : IDE 向け再マッピング
-- `build.gradle` では Java 21 をターゲットにし、JUnit 5 / Mockito / Checkstyle / Spotless を設定しています。
+  - `./gradlew :fabric:runClient` / `./gradlew :neoforge:runClient` : Loader 別開発用クライアント起動
+  - `./gradlew :fabric:genSources` : Fabric の IDE 向けソース生成
+- Java toolchain は `gradle.properties` の `java_version`（現行25）を参照し、JUnit 5 / Mockito / Checkstyle / Spotless を使います。
+- クライアント専用です。開発手順としてサーバー起動は案内しません。
 - `config/checkstyle/checkstyle.xml` が Checkstyle 設定です。
-- ビルド成果物は `build/libs/`、開発ランタイムは `run/` に出力されます。
+- ビルド成果物は `fabric/build/libs/` / `neoforge/build/libs/`、開発ランタイムは `run/fabric/` / `run/neoforge/` です。
 
 ## テスト
 - 既存のユニットテストは `src/test/java` にあります。
@@ -110,21 +124,33 @@
 
 ## CI / リリース
 - CI は `.github/workflows/build.yml` で実行されます。
-  - `changes` ジョブが `dorny/paths-filter` で fabric / neoforge に影響する変更を検知します。
-  - `format`（`spotlessCheck`）、`test`（`:fabric:test` = 共通コードのテスト）、`script-tests`
-    （リリース支援 Python スクリプトの compile / unittest）は常時実行します。
-  - `build-fabric`（`:fabric:build -x test`）と `build-neoforge`（`:neoforge:build`）は、該当ローダーに
-    影響する変更があるときだけ実行します。
-  - `ci-ok` ジョブが全ジョブの結果を集約します。branch protection の必須ステータスチェックはこれ1つです。
-  - Java バージョンは `gradle.properties` の `java_version` が単一の真実で、`.github/actions/setup-build`
-    （composite action）が読み取って `actions/setup-java` を実行します。matrix ビルドはありません。
+  - `main` / 数値 MC ブランチ / `mc/<数値MC>` の PR・push と、単一 supported target を指定する
+    `workflow_dispatch` に対応します。`changes` が path filter と catalog から full source SHA・対象 matrix を固定します。
+  - PR は宛先 `base.sha` の catalog と merge SHA を使います。宛先 catalog が不存在の場合だけ導入用に merge 版へ
+    fallback し、summary に明示します。不正 catalog や権限エラーでの fallback は禁止します。
+  - 有効な計画では `format`（全体 `spotlessCheck`）、`test`（`:fabric:test` を1回）、`script-tests`
+    （Python compile / unittest と通知 dry-run）を変更パスによらず実行します。共有テストには MC 依存テストも含みます。
+  - `build` は共通変更で全 supported Loader、Loader 固有変更で該当 Loader の matrix を実行します。
+    docs のみなら build は省略し、dispatch は指定 target のみをビルドします。
+  - format / test / build は `.github/workflows/target-build.yml` を再利用します。Loader build は
+    `:<loader>:build -x test` と通常 JAR 検証を行い、target と full source SHA を含む名で artifact を保存します。
+  - `ci-ok`（表示名 `CI OK`）が plan / matrix と必要 job を厳密に集約します。build 対象が空の場合だけその skip を許可し、
+    不正 matrix・失敗・取消・予期しない skip は失敗します。唯一の必須 check 方針は維持します。
+  - Java は対象 checkout の `gradle.properties` の `java_version` を `.github/actions/setup-build` が読み取ります。
+    既存の setup-java Gradle cache を使い、各 Gradle 経路で strict dependency verification を明示します。
+    reusable job の summary には target / SHA / 実 JDK / 結果 / cache exact hit / Gradle 実行秒数を記録します。
 - リリースは `.github/workflows/release.yml` の手動実行（`workflow_dispatch`）で行います。
-  - 入力は `channel`（`alpha` / `beta` / `release`）と `loaders`（`both` / `fabric` / `neoforge`）です。
-    `channel=release` では `loaders=both` のみ指定できます。
-  - `mod_version` と対象 Minecraft バージョンブランチを検証し、**ビルド成功後に** annotated tag を push して
-    から Modrinth と GitHub Releases へ公開し、最後に Discord へ通知します。
-  - changelog は `scripts/changelog_tool.py` を使い、`--loaders` でローダー別ノートを生成します。
-  - Discord 通知は `scripts/notify_discord.py` が組み立てます。
+  - `release_version` に alpha/beta の番号を含む純 SemVer を明示し、`channel` と `loaders` を固定します。
+    supported であれば stable 単 Loader も許可します。公開後の Loader 追加は新 PATCH とします。
+  - `plan-new` / `plan-reuse` は公開なしの計画検証、`prepare-new` は read-only build/check と不変 bundle 生成です。
+  - 成功 prepare の run ID / full source SHA / manifest SHA256 で `github-stage` を実行し、
+    annotated tag と draft に同じ bundle を保管・再照合します。既存一致は再利用し、相違は停止します。
+  - `github-resume` は保存済み bundle の復元・照合、`publish` は不足先を照合・補完して全必須先成功後に finalize します。
+    再開は保存 plan を使い、移行後も `release_source_branch` と SHA / target 集合を変えません。
+  - attempt / verified receipt と外部 ID は別 publish-state に記録します。応答喪失時に成功を証明できなければ停止し、
+    tag / Release / version の削除・上書きや無検証の再ビルドで復旧しません。旧 mc-publish 経路は使用しません。
+  - changelog は `scripts/changelog_tool.py --loaders` を再利用します。Discord は finalize 成功後だけ通知し、
+    `DISCORD_WEBHOOK_URL` 未設定なら通知を省略します。具体的手順・必要権限は `docs/release-workflow.md` を参照してください。
 - ワークフロー内では `run:` ブロックに `${{ }}` を書かず、必ず `env:` 経由でクオートして参照します。
   action は commit SHA で pin します。
 - 補足手順は `docs/ci-build.md` と `docs/release-workflow.md` を参照してください。
@@ -133,7 +159,7 @@
 - Java コードは 4 スペースインデント、UTF-8、原則 120 文字以内です。
 - パッケージは小文字ドメイン、クラスは PascalCase、メソッド・フィールドは camelCase、定数は UPPER_SNAKE です。
 - 値オブジェクトやドメイン状態は既存の `record` / 小粒なクラス構成に合わせてください。
-- 依存関係の配線は `StreamTweaksClient` に集約し、ビジネスロジックは `application` / `twitch/*` に寄せてください。
+- 依存関係の配線は `TwitchClientBootstrap` に集約し、ビジネスロジックは `application` / `twitch/*` に寄せてください。
 - 使わない mixin は `stream-tweaks.mixins.json` に追加しないこと。
 - ユーザー向け文言は既存の翻訳キーを再利用し、必要なら `ja_jp.json` と `en_us.json` を同時更新してください。
 

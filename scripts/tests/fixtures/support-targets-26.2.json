@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "authority_branch": "26.2",
+  "targets": [
+    {
+      "id": "26.2-fabric",
+      "minecraft": "26.2",
+      "loader": "fabric",
+      "lifecycle": "active",
+      "support": "supported",
+      "source_branch": "26.2",
+      "java_version": 25,
+      "features": ["twitch-chat", "message-delete", "emotes", "config-screen", "modmenu"],
+      "limitations": ["クライアント専用。runtime smoke は未確認。"],
+      "verification": {
+        "build": {"status": "unverified", "date": null, "evidence": []},
+        "runtime_smoke": {"status": "unverified", "date": null, "evidence": []}
+      }
+    },
+    {
+      "id": "26.2-neoforge",
+      "minecraft": "26.2",
+      "loader": "neoforge",
+      "lifecycle": "active",
+      "support": "supported",
+      "source_branch": "26.2",
+      "java_version": 25,
+      "features": ["twitch-chat", "message-delete", "emotes", "config-screen"],
+      "limitations": ["クライアント専用。ModMenu は Fabric 限定。runtime smoke は未確認。"],
+      "verification": {
+        "build": {"status": "unverified", "date": null, "evidence": []},
+        "runtime_smoke": {"status": "unverified", "date": null, "evidence": []}
+      }
+    }
+  ]
+}

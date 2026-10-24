@@ -2,13 +2,18 @@ name: Build
 
 on:
   pull_request:
+    branches: [main, '[0-9]+.[0-9]+', '[0-9]+.[0-9]+.[0-9]+', 'mc/**']
   push:
-    branches:
-      - '[0-9]+.[0-9]+'
-      - '[0-9]+.[0-9]+.[0-9]+'
+    branches: [main, '[0-9]+.[0-9]+', '[0-9]+.[0-9]+.[0-9]+', 'mc/**']
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'One supported catalog target (for example 26.2-fabric)'
+        required: true
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.target }}
   cancel-in-progress: true
 
 permissions:
@@ -16,23 +21,33 @@ permissions:
 
 jobs:
   changes:
-    name: Detect changes
+    name: Plan target CI
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # pull_request イベントで差分を取得する際に API アクセスが必要
       pull-requests: read
     outputs:
-      fabric: ${{ steps.filter.outputs.fabric }}
-      neoforge: ${{ steps.filter.outputs.neoforge }}
+      plan: ${{ steps.plan.outputs.plan }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has-builds: ${{ steps.plan.outputs.has-builds }}
+      check-target: ${{ steps.plan.outputs.check-target }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-
+      - name: Read PR destination catalog
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: catalog-source
+          persist-credentials: false
       - id: filter
+        if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
+          # Long-lived pushes compare to their own pre-push commit, including Maintenance branches.
+          base: ${{ github.ref_name }}
           filters: |
             common: &common
               - 'src/**'
@@ -43,134 +58,91 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'config/checkstyle/**'
-              - '.github/workflows/*.yml'
+              - '.github/workflows/**'
               - '.github/actions/**'
+              - 'scripts/**'
+              - 'support-targets.json'
             fabric:
               - *common
               - 'fabric/**'
             neoforge:
               - *common
               - 'neoforge/**'
+      - id: plan
+        name: Validate selection and freeze source SHA
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_BRANCH: ${{ github.base_ref || github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+          TARGET: ${{ inputs.target }}
+          FABRIC: ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.fabric }}
+          NEOFORGE: ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.neoforge }}
+          CATALOG: ${{ github.event_name == 'pull_request' && 'catalog-source/support-targets.json' || 'support-targets.json' }}
+          FALLBACK_CATALOG: ${{ github.event_name == 'pull_request' && 'support-targets.json' || '' }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci_targets.py plan
+
+  format:
+    name: Format (all sources)
+    needs: changes
+    uses: ./.github/workflows/target-build.yml
+    with:
+      source-plan: ${{ needs.changes.outputs.plan }}
+      target: ${{ needs.changes.outputs.check-target }}
+      mode: format
 
   test:
-    # テスト実体はルートの src/test/java（ローダー非依存の共通コード）にあり、
-    # test タスクを持つのは fabric サブプロジェクトだけなので path filter の対象外として常時実行する。
     name: Test (shared)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-build
-
-      - name: Run shared tests
-        run: ./gradlew :fabric:test --stacktrace
+    needs: changes
+    uses: ./.github/workflows/target-build.yml
+    with:
+      source-plan: ${{ needs.changes.outputs.plan }}
+      target: ${{ needs.changes.outputs.check-target }}
+      mode: test
 
   script-tests:
-    name: Release Script Tests
+    name: Script Tests
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ fromJSON(needs.changes.outputs.plan).source_sha }}
           persist-credentials: false
-
-      - name: Compile release scripts
-        run: python3 -m py_compile scripts/changelog_tool.py scripts/notify_discord.py
-
-      - name: Run changelog tool tests
-        run: python3 -m unittest discover scripts/tests
-
+      - name: Compile and test scripts
+        run: |
+          python3 -m compileall -q scripts
+          python3 -m unittest discover scripts/tests
       - name: Check Discord notification payload
         run: >
           python3 scripts/notify_discord.py
-          --status success
-          --channel beta
-          --tag v0.0.0-beta.1+mc26.2
-          --mc 26.2
-          --loaders both
-          --notes-file /dev/null
-          --dry-run
+          --status success --channel beta --tag v0.0.0-beta.1+mc26.2
+          --mc 26.2 --loaders both --notes-file /dev/null --dry-run
 
-  build-fabric:
-    name: Build Fabric
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: ${{ needs.changes.outputs.fabric == 'true' }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-build
-
-      # test は Test (shared) ジョブで実行済みなので二重実行しない
-      - name: Build Fabric artifact
-        run: ./gradlew :fabric:build -x test --stacktrace
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: success()
-        with:
-          name: build-artifacts-fabric-${{ github.sha }}
-          path: |
-            fabric/build/libs/*.jar
-            !fabric/build/libs/*-sources.jar
-            !fabric/build/libs/*-dev.jar
-          retention-days: 7
-
-  build-neoforge:
-    name: Build NeoForge
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: ${{ needs.changes.outputs.neoforge == 'true' }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-build
-
-      - name: Build NeoForge artifact
-        run: ./gradlew :neoforge:build --stacktrace
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: success()
-        with:
-          name: build-artifacts-neoforge-${{ github.sha }}
-          path: |
-            neoforge/build/libs/*.jar
-            !neoforge/build/libs/*-sources.jar
-            !neoforge/build/libs/*-dev.jar
-          retention-days: 7
+  build:
+    name: Build ${{ matrix.target }}
+    needs: changes
+    if: needs.changes.outputs.has-builds == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    uses: ./.github/workflows/target-build.yml
+    with:
+      source-plan: ${{ needs.changes.outputs.plan }}
+      target: ${{ matrix.target }}
+      mode: build
 
   ci-ok:
-    # 唯一の必須ステータスチェック。path filter でスキップされたジョブは成功扱いにする。
     name: CI OK
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, test, script-tests, build-fabric, build-neoforge]
+    needs: [changes, format, test, script-tests, build]
     steps:
-      - name: Check job results
-        shell: bash
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Require expected jobs and a valid matrix
         env:
-          RESULTS: ${{ join(needs.*.result, ',') }}
-        run: |
-          set -euo pipefail
-
-          echo "依存ジョブの結果: ${RESULTS}"
-
-          FAILED=0
-          IFS=',' read -r -a RESULT_LIST <<< "${RESULTS}"
-          for result in "${RESULT_LIST[@]}"; do
-            case "$result" in
-              success|skipped) ;;
-              *)
-                echo "失敗またはキャンセルされたジョブがあります (result=${result})"
-                FAILED=1
-                ;;
-            esac
-          done
-
-          exit "$FAILED"
+          PLAN: ${{ needs.changes.outputs.plan }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_targets.py aggregate

@@ -1,0 +1,98 @@
+name: Target build
+
+on:
+  workflow_call:
+    inputs:
+      source-plan:
+        description: 'Validated CI plan containing an immutable full source SHA'
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      mode:
+        description: 'format, test, or build'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CI controller
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Checkout immutable target source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ fromJSON(inputs.source-plan).validation_source_sha }}
+          path: source
+          persist-credentials: false
+      - id: validate
+        name: Validate target checkout against plan
+        env:
+          PLAN: ${{ inputs.source-plan }}
+          TARGET: ${{ inputs.target }}
+          BUILD_MODE: ${{ inputs.mode }}
+        run: python3 scripts/ci_targets.py checkout
+      - id: setup
+        uses: ./.github/actions/setup-build
+        with:
+          properties-path: source/gradle.properties
+          cache-dependency-path: |
+            source/**/*.gradle*
+            source/gradle.properties
+            source/gradle/wrapper/gradle-wrapper.properties
+            source/gradle/verification-metadata.xml
+      - id: gradle
+        name: Check format, shared tests, or loader build
+        working-directory: source
+        env:
+          BUILD_MODE: ${{ inputs.mode }}
+          LOADER: ${{ steps.validate.outputs.loader }}
+        run: |
+          set -euo pipefail
+          START_SECONDS=$SECONDS
+          trap 'echo "elapsed-seconds=$((SECONDS - START_SECONDS))" >> "$GITHUB_OUTPUT"' EXIT
+          case "$BUILD_MODE" in
+            format) ./gradlew spotlessCheck --dependency-verification=strict --stacktrace ;;
+            test) ./gradlew :fabric:test --dependency-verification=strict --stacktrace ;;
+            build) ./gradlew ":${LOADER}:build" -x test --dependency-verification=strict --stacktrace ;;
+            *) exit 1 ;;
+          esac
+      - id: artifact
+        name: Validate normal distribution JAR
+        if: inputs.mode == 'build'
+        env:
+          LOADER: ${{ steps.validate.outputs.loader }}
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_artifacts.py --properties source/gradle.properties --loader "$LOADER" \
+            --directory "source/${LOADER}/build/libs" > artifact.json
+          python3 -c 'import json, os; d=json.load(open("artifact.json")); print("path=source/" + d["loader"] + "/build/libs/" + d["filename"], file=open(os.environ["GITHUB_OUTPUT"], "a"))'
+      - name: Upload validated artifact
+        if: inputs.mode == 'build'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: build-artifacts-${{ inputs.target }}-${{ fromJSON(inputs.source-plan).validation_source_sha }}
+          path: |
+            ${{ steps.artifact.outputs.path }}
+            artifact.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Record target validation result
+        if: always()
+        env:
+          PLAN: ${{ inputs.source-plan }}
+          TARGET: ${{ inputs.target }}
+          BUILD_MODE: ${{ inputs.mode }}
+          JOB_RESULT: ${{ job.status }}
+          GRADLE_RESULT: ${{ steps.gradle.outcome }}
+          SETUP_RESULT: ${{ steps.setup.outcome }}
+          CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
+          ELAPSED_SECONDS: ${{ steps.gradle.outputs.elapsed-seconds }}
+        run: python3 scripts/ci_targets.py report

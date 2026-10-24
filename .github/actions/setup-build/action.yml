@@ -1,7 +1,22 @@
 name: 'Setup build environment'
 description: 'gradle.properties の java_version を単一の真実として JDK と Gradle キャッシュを準備する'
 
+inputs:
+  properties-path:
+    description: '対象 checkout の gradle.properties'
+    default: 'gradle.properties'
+  cache-dependency-path:
+    description: 'setup-java が Gradle cache key に含める対象 checkout の入力'
+    default: |
+      **/*.gradle*
+      **/gradle-wrapper.properties
+      **/gradle.properties
+      **/verification-metadata.xml
+
 outputs:
+  cache-hit:
+    description: 'setup-java Gradle cache exact hit（未報告時は空文字）'
+    value: ${{ steps.java.outputs.cache-hit }}
   java-version:
     description: 'セットアップした Java のメジャーバージョン'
     value: ${{ steps.resolve.outputs.java-version }}
@@ -12,27 +27,30 @@ runs:
     - id: resolve
       name: Resolve Java version from gradle.properties
       shell: bash
+      env:
+        PROPERTIES_PATH: ${{ inputs.properties-path }}
       run: |
         set -euo pipefail
-
-        if [[ ! -f gradle.properties ]]; then
-          echo "gradle.properties が見つかりません。checkout 後にこの action を呼び出してください" >&2
-          exit 1
-        fi
-
-        JAVA_VERSION="$(sed -nE 's/^[[:space:]]*java_version[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' gradle.properties | head -n1)"
-
-        if ! [[ "$JAVA_VERSION" =~ ^[0-9]+$ ]]; then
-          echo "gradle.properties の java_version が不正です (取得値: '${JAVA_VERSION}')" >&2
-          exit 1
-        fi
-
-        echo "java-version=${JAVA_VERSION}" >> "$GITHUB_OUTPUT"
-        echo "Java ${JAVA_VERSION} をセットアップします"
+        python3 - <<'PYTHON'
+        import os, pathlib, re
+        values = []
+        for line in pathlib.Path(os.environ["PROPERTIES_PATH"]).read_text().splitlines():
+            match = re.fullmatch(r"\s*java_version\s*=\s*([1-9][0-9]*)\s*", line)
+            if match:
+                values.append(match[1])
+            elif re.match(r"\s*java_version\s*=", line):
+                raise SystemExit("invalid java_version")
+        if len(values) != 1:
+            raise SystemExit("java_version must occur exactly once")
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write("java-version=" + values[0] + "\n")
+        PYTHON
 
     - name: Setup Java
+      id: java
       uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
       with:
         distribution: 'temurin'
         java-version: ${{ steps.resolve.outputs.java-version }}
         cache: 'gradle'
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}

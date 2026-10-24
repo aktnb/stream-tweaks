@@ -188,123 +188,19 @@ authOrchestrator.startAuthentication(uri -> {
 
 ## リリース手順
 
-タグの発行からビルド・公開までを `.github/workflows/release.yml`（**Release** ワークフロー）が1本で行う。手動で `git tag` / `git push` することは基本的に不要。
+現行の運用手順は [docs/release-workflow.md](docs/release-workflow.md)、版番号契約は
+[docs/versioning.md](docs/versioning.md) を参照する。手順切替版は2026-10-24で、remote への導入後に使用する。
 
-> **背景**: 以前はタグ発行用ワークフローと `push: tags` トリガーの公開用ワークフローを分けていたが、GitHub Actions の仕様上「デフォルトの `GITHUB_TOKEN` で push したタグは他のワークフローをトリガーしない」という制限に引っかかり、タグは発行されても公開ワークフローが発火しない問題が起きた。そのため1本のワークフローに統合し、同一ジョブ内でタグ発行から公開まで完結させている。
+- 純 SemVer と channel、MC、Loader 集合を明示する。alpha/beta は番号まで固定し、自動採番しない。
+- `prepare-new` は read-only build/check 後に固定 plan / 通常 JAR / notes / manifest を生成する。公開はしない。
+- 成功 prepare の run ID / full source SHA / manifest SHA256 を保存し、`github-stage` で同 bundle を draft に保管する。
+- `publish` は draft から復元して各公開先を再照合し、不足分だけ補完する。全必須先成功後に draft を解除・通知する。
+- 部分成功の再開でも source / version / target / 公開先を変えず、保存 plan を使う。
+  main 移行後も `release_source_branch` は元の値を指定する。
+- stable の単 Loader を許可する。公開後に別 Loader を追加する場合は新 PATCH とし、既存集合を拡張しない。
+- 応答喪失は再照会し、成功を証明できなければ停止する。Tag / Release / Modrinth version の削除・overwrite による復旧は禁止。
+- artifact 消失時は無検証で再ビルドせず、元 manifest と同じ hash の bundle を回復できる場合だけ再開する。
+- changelog の `[fabric]` / `[neoforge]` / `[fabric,neoforge]` filter を再利用し、タグなし項目は共通とする。
+- secret は環境からのみ読み、値をログや引数へ出さない。GitHub / Modrinth の原子的公開は保証しない。
 
-- `mod_version` / `minecraft_version` は対象バージョンブランチの `gradle.properties` から自動取得される（形式を正規表現で検証してから使用）
-- タグ名は自動採番される（手で決めない）。Fabric / NeoForge 共通の**1系列**で、ローダー別サフィックスは付けない
-  - alpha / beta: 同じ `mod_version` 内で前回タグの連番 + 1（`vX.Y.Z-alpha.N+mcA.B.C` / `vX.Y.Z-beta.N+mcA.B.C`）
-  - release: `vX.Y.Z+mcA.B.C`
-- **実行順序は「ビルド → タグ push → publish」**。ビルド失敗ではタグが作られないため、失敗の大半はそのまま再実行できる
-- タグは annotated tag で、メッセージは `Release <tag>` / `Loaders: <公開したローダー>` の2行のみ（changelog 本文は含めない）
-
-### `loaders` 入力
-
-`Release` ワークフローには `channel` に加えて `loaders` 入力がある。
-
-| 値 | 公開対象 |
-| --- | --- |
-| `both`（既定） | Fabric + NeoForge |
-| `fabric` | Fabric のみ |
-| `neoforge` | NeoForge のみ |
-
-**`channel=release` では `loaders=both` 必須**（安定版タグは `vX.Y.Z+mcA.B.C` 固定のため、片方だけ公開すると2回目の実行でタグが衝突する）。`compute` ステップで即座に失敗する。alpha / beta は連番採番なので片方だけの公開が可能で、次回はタグメッセージの `Loaders:` 行から「そのローダーを最後に公開したタグ」を探して差分ノートを作る。
-
-### CHANGELOG のローダータグ記法
-
-`CHANGELOG.md` の箇条書き先頭に `[fabric]` / `[neoforge]` / `[fabric,neoforge]` を付けると、リリースノート生成時に `scripts/changelog_tool.py --loaders` で絞り込まれる。
-
-```markdown
-### Fixed
-- 共通の不具合を修正（タグ無し = 全ローダー向け）
-- [fabric] Fabric でのみ発生する不具合を修正
-- [neoforge] NeoForge でのみ発生する不具合を修正
-```
-
-- タグ無しの箇条書きは共通扱いで、どのローダーのノートにも必ず含まれる
-- **本文が完全に同じ内容なら `[fabric,neoforge]` として1件にまとめる**（`[fabric]` と `[neoforge]` に分けて書くとまとめノートで2行になる）
-- 未知のタグ（例: `[quilt]`）や Markdown リンク記法 `- [text](url)` はローダータグとみなされない
-- 単一ローダー向けノートでは出力時にタグが自動除去される。`CHANGELOG.md` 自体には常にタグ付きのまま保存される
-
-### alpha / beta リリース
-
-`[Unreleased]` に変更を書き溜めた状態で、対象バージョンブランチ（例: `26.2`）を指定して **Release** ワークフローを実行し、`channel` に `alpha` または `beta` を選択する。CHANGELOG.md の事前更新は不要（ワークフローが `[Unreleased]` の差分をリリースノートとして使用する）。
-
-```bash
-# GitHub CLI から実行する場合
-gh workflow run release.yml --ref 26.2 -f channel=alpha -f loaders=both
-
-# Fabric だけ先に配りたい場合
-gh workflow run release.yml --ref 26.2 -f channel=beta -f loaders=fabric
-```
-
-GitHub の Actions タブから手動実行（Run workflow）してもよい。
-
-### 正式リリース（release）
-
-**ワークフローを実行する前に必ず以下の手順を完了すること。** CHANGELOG.md に `## [{mod_version}]` セクションが存在しない状態で `release` を実行すると、ワークフローはタグを作成せず失敗する。
-
-#### 1. リリース準備 PR を作成
-
-```bash
-git checkout -b release/0.1.2
-```
-
-#### 2. CHANGELOG.md を更新（ローカルで実行）
-
-```bash
-python3 scripts/changelog_tool.py release --version 0.1.2 --update-file
-```
-
-これにより：
-- `[Unreleased]` の内容が `## [0.1.2] - YYYY-MM-DD` セクションに移動する
-- `[Unreleased]` が空のテンプレートにリセットされる
-
-#### 3. 確認・コミット・PR 作成
-
-```bash
-# ローカルで事前確認（ワークフローが読む内容を確認）
-python3 scripts/changelog_tool.py read --version 0.1.2
-
-git add CHANGELOG.md
-git commit -m "docs: prepare release 0.1.2"
-gh pr create --base 26.2
-```
-
-#### 4. PR マージ後に Release ワークフローを実行
-
-```bash
-gh workflow run release.yml --ref 26.2 -f channel=release -f loaders=both
-```
-
-`channel=release` を選択して実行すると、まず `## [0.1.2]` セクションからリリースノートを生成してビルドし、成功後に `v0.1.2+mc26.2` 形式のタグを push してから Modrinth / GitHub Release / Discord に自動投稿する。
-
-### リカバリ手順
-
-ビルドがタグ push より前に走るため、**ビルド失敗・入力ミス・CHANGELOG 不備ではタグが作られない**。原因を直してワークフローを再実行するだけでよい。
-
-タグ削除が必要になるのは、**タグ push 後の publish ステップで失敗したとき**だけ（同名タグは既に存在するタグとして **Release** ワークフローに拒否されるため）。
-
-```bash
-# 1. タグを削除（ローカルとリモート両方）
-git tag -d v0.1.2+mc26.2
-git push origin :refs/tags/v0.1.2+mc26.2
-
-# 2. GitHub Release が中途半端に作られていれば削除する
-gh release delete v0.1.2+mc26.2 --yes
-
-# 3. 必要なら CHANGELOG.md を修正して PR → マージ
-python3 scripts/changelog_tool.py release --version 0.1.2 --update-file
-git add CHANGELOG.md
-git commit -m "docs: prepare release 0.1.2"
-gh pr create --base 26.2
-# PR マージ後
-
-# 4. 再度 Release ワークフローを実行
-gh workflow run release.yml --ref 26.2 -f channel=release -f loaders=both
-```
-
-Modrinth に version が作成済みの場合は、Modrinth 管理画面から該当 version を削除してから再実行する（同じ version 番号は再利用できない）。
-
-詳細は `docs/release-workflow.md` / `docs/ci-build.md` を参照。
+公開なしの CLI / mock 確認、権限・未設定時の挙動、具体的な prepare / stage / resume / publish / 状態確認は上記ガイドを使う。
