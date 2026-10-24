@@ -16,8 +16,10 @@ feature branchも実在するため「branchは26.2のみ」とは扱いませ�
 | [PR CI 40094910231](https://github.com/aktnb/stream-tweaks/actions/runs/40094910231) | PR head `6af0e2d4dd63456103389701c7abd6b877702a16`。test merge checkout SHAとは区別する | 両Loader build／JAR検証・共有test・format・script tests・CI OK成功 |
 | [merge後push CI 40095310540](https://github.com/aktnb/stream-tweaks/actions/runs/40095310540) | 実source `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` | 両Loader build／JAR検証・共有test・format・script tests・CI OK成功 |
 
-台帳の build 記録はこのmerge後sourceの実績です。今回の準備 PR の未作成commitを検証済みとは扱わず、
-runtime smoke も未確認のままです。
+台帳の build 記録はこのmerge後sourceの実績です。今回の準備 PR head
+`8617d901317141aab8625b9fb01897a425f4df47` は [PR CI 40097096849](https://github.com/aktnb/stream-tweaks/actions/runs/40097096849)
+が成功し、両Loader build／JAR検証・共有test・format・script tests・`CI OK` を含む全7 jobが成功しました。
+runtime smoke は未確認のままです。
 
 本人 `aktnb` の repository 権限は admin ですが、接続 App の classic branch protection 読取は
 `403 Resource not accessible by integration` です。本人の admin 権限だけで接続 App の管理操作が
@@ -31,10 +33,16 @@ deletion / non_fast_forward 禁止と required_status_checks rule、bypassなし
 `strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
 この条件では準備merge後の同一source commitにCI OK成功が付くのを待ってからmainを作成します。
 
-2026-10-24 12:51 UTC時点のmatching-refs/tagsとRelease一覧は空、全runはBuildだけの5件で、
-進行中publishはありませんでした。`plan-new`（0.3.3-beta.1 / beta / both）のdispatch試行は
-`403 Must have admin rights to Repository`でrun未作成、prepareは未試行です。
-ユーザーUIからの単target／全対象／plan／prepare成功確認はまだ済んでいません。
+2026-10-24 12:51 UTC時点のmatching-refs/tagsとRelease一覧は空で、進行中publishはありませんでした。
+`plan-new`（0.3.3-beta.1 / beta / both）のdispatch試行は
+`403 Must have admin rights to Repository`でrun未作成でした。
+
+その後、ユーザーUIから `Use workflow from: 26.2` で実行した Validate supported targets は成功しました。
+全対象の [run 40096170430](https://github.com/aktnb/stream-tweaks/actions/runs/40096170430) は
+source SHA `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` のFabric／NeoForge両方を検証し、
+単一target `26.2-fabric` の [run 40096370197](https://github.com/aktnb/stream-tweaks/actions/runs/40096370197)
+も同じsource SHAで成功しました。Build の単target dispatch と Release の `prepare-new` は未実施です。
+`plan-new` も成功runがないため、切替前の公開なし計画／prepare gate は未達です。
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
