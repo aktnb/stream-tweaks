@@ -222,5 +222,18 @@ backport は対象別 PR / `cherry-pick -x` と、その変更 SHA に対する 
 
 導入時のローカル fixture は2 MC × 2 Loader で source 解決2回・shared test group 2つ・build 4行を確認し、
 途中の HEAD 更新で SHA が変わらないこと、明示 subset と不正 target の拒否を確認しています。
-GitHub runner 上の schedule / dispatch 実行と cache hit / 時間の実測は、workflow 導入後の確認事項です。
-上の26.2再構築記録の cold / warm 時間はローカル隔離ビルドの値であり、この workflow の runner 計測とは扱いません。
+GitHub runner 上では、2026-10-24 UTC に main 移行前の先行確認として `26.2` から次の dispatch を実行しました。
+
+| 選択 / Run | 対象 / JDK | 固定 source SHA | 結果 | Cache exact hit / Gradle 秒数 |
+| --- | --- | --- | --- | --- |
+| `all` / [40096170430](https://github.com/aktnb/stream-tweaks/actions/runs/40096170430) | 26.2 Fabric + NeoForge / 25 | `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` | workflow 全 job 成功 | 各 Gradle job `true`; format 14 / shared tests 63 / Fabric 74 / NeoForge 61 |
+| `26.2-fabric` / [40096370197](https://github.com/aktnb/stream-tweaks/actions/runs/40096370197) | 26.2 Fabric / 25 | `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` | workflow 全 job 成功 | 各 Gradle job `true`; format 15 / shared tests 79 / Fabric 51 |
+
+Artifact 名は次のとおりです。
+
+- `all`: `validation-plan-40096170430-1`、`build-artifacts-26.2-fabric-965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d`、`build-artifacts-26.2-neoforge-965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d`
+- `26.2-fabric`: `validation-plan-40096370197-1`、`build-artifacts-26.2-fabric-965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d`
+
+上記は Actions job log の実測値です。対象 checkout と plan artifact の source SHA は全 job で一致しました。
+schedule の cron 設定と dispatch は同じ `resolve` job を使いますが、scheduled event 自体の実行はまだ確認していません。
+上の26.2再構築記録の cold / warm 時間はローカル隔離ビルドの値であり、この workflow の runner 計測とは別です。
