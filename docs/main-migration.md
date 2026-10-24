@@ -63,7 +63,7 @@ prepare-new artifactの照合結果:
 その後、[Release の plan-new run 40098896694](https://github.com/aktnb/stream-tweaks/actions/runs/40098896694) が `workflow_dispatch` で成功しました。実行refは `26.2`、fixed source SHAは `d5d8127b040148ff350c8d08acb70191fac45b23`、release version `0.3.3-beta.1`、channel `beta`、loaders `both` です。Fabric／NeoForge両targetのplanを計算し、Compute fixed plan jobが成功、bundle build／staging／draft保存はskipされました。公開操作はありません。
 plan artifact ID `12561936649`（`release-plan-40098896694-d5d8127b040148ff350c8d08acb70191fac45b23`）のarchive SHA256は `42f49de7820544150ee2190efb763088c6cdad3278cffbab5c0c78bdc7d4a007` です。artifact metadataとrun logでsource branch／SHAおよびtarget集合を照合しました。
 切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。2026-10-24 13:45 UTCに、確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成し、`26.2` と同じSHAを指すことを再取得しました。初回 push [run 40099703840](https://github.com/aktnb/stream-tweaks/actions/runs/40099703840) は成功し、`CI OK` も成功しましたが、loader build matrix はskipでした。
-main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) の [CI run 40108505766](https://github.com/aktnb/stream-tweaks/actions/runs/40108505766) は head SHA `e162f971c6f742bf30e5673adefc8781ddaa3256` で成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。mainの単target／全対象CI、`plan-new`／`prepare-new` dispatch は未実施なので、移行完了ではありません。
+main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) の [CI run 40108736789](https://github.com/aktnb/stream-tweaks/actions/runs/40108736789) は head SHA `f1263543323c0c84892b45571265b72387342d86` で成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。Fabric単target [run 40108697819](https://github.com/aktnb/stream-tweaks/actions/runs/40108697819) も成功済みです。NeoForge単target、全対象、`plan-new`／`prepare-new` dispatch は未実施なので、移行完了ではありません.
 一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
@@ -180,7 +180,7 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 
 | #14 の受入条件 | 保存すべき証拠 | 現時点 |
 | --- | --- | --- |
-| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21のPR CI run 40108505766は成功（loader matrix skip）。初回push CIも成功。単target／全対象／plan／prepare dispatchは未実施 |
+| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21のPR CI run 40108736789は成功（loader matrix skip）。Fabric単target run 40108697819成功。NeoForge単target／全対象／plan／prepareは未実施 |
 | 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | mainのauthority/sourceはmain、26.2とmainのrefは同じSHA。defaultは26.2のまま |
 | 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | main作成前はTag／Releaseとも0件。main作成後のGitHub Releasesも空。Tag／asset最終再照合は未実施 |
 | CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをowner UIで確認 |
