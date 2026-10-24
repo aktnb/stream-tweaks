@@ -10,7 +10,8 @@
 - 現在の実装は `application` / `presentation` / `twitch/*` に責務を分離した構成です。
 - 主な依存関係は Fabric API / NeoForge、Gson、NightConfig、Java 標準ライブラリ (`java.net.http` など) です。
 - 対応・保守の ADR は `docs/support-policy.md`、公開契約・版番号の ADR は `docs/versioning.md` を参照してください。
-- Active 1 MC + Maintenance 最大1 MC、Loader 別ブランチなし。現在は `26.2`、main 導入後は main を唯一の Active 公開元とします。
+- Active 1 MC + Maintenance 最大1 MC、Loader 別ブランチなし。台帳は main を唯一の Active 公開元に予約する移行準備中です。
+- main 未作成・default 未切替の段階では新規公開を停止し、準備 PR は `26.2` 宛てにします。実際の状態と merge gate は `docs/main-migration.md` を参照してください。
 - feature / backport ブランチから対象別 PR / CI を使い、共通修正の移植は `cherry-pick -x` で追跡します。
 - ルート共通 sourceSet にも MC 依存コードがあります。MC 非依存業務ロジックと区別してください。
 

@@ -74,28 +74,32 @@ build / check 成功後、固定計画から生成した JAR / notes / manifest 
 `scripts/release_plan.py` は純 SemVer と channel を照合し、台帳の supported 行から選んだ
 MC / Loader、唯一の公開元、full source SHA、Java、ファイル名、公開先契約を固定する。
 alpha / beta は必ず明示番号を渡す。通常版は `--channel release --version 0.3.4` とし、片 Loader でもよい。
+準備台帳の公開元はmain。以下の新規例はmain作成・移行検証後に使い、それまでは新規公開を停止する。
+[移行手順](main-migration.md)でbranchの実在と管理確認 gate を確認する。
 
 ```sh
 python3 scripts/release_plan.py new \
   --version 0.3.4-beta.1 --channel beta --minecraft 26.2 \
-  --source-branch 26.2 --source-sha <40文字のcommit-SHA> \
+  --source-branch main --source-sha <mainの40文字commit-SHA> \
   --loader fabric --loader neoforge --properties gradle.properties --output release-plan.json
 
 python3 scripts/release_plan.py reuse \
   --version 0.3.4-beta.1 --channel beta --minecraft 26.2 \
-  --source-branch 26.2 --source-sha <初回と同じcommit-SHA> \
+  --source-branch main --source-sha <初回と同じcommit-SHA> \
   --loader fabric --loader neoforge --existing release-plan.json
 ```
 
 `--output` は新規ファイルだけを作成し、既存ファイルを上書きしない。指定しなければ stdout のみ。
 保存済み ID の再実行は `reuse` と保存済み plan を使う。SHA、公開元、対象集合、公開先の相違は停止する。
 reuse は最新台帳を読み直さないので、後から追加された supported 行を取り込まず、元の計画を保持する。
+移行前26.2で作った既存計画の再開だけは、上の例のmainではなく元の `source_branch=26.2` と元SHAを維持する。
 この CLI はローカル保存のみで、同 ID の全世界での予約や remote tag の照合は後続 publish adapter の責務。
 計画自体の信頼性は、将来の公開時に信頼できる同一 repository の bundle / manifest と照合する。
 
 必須公開先は GitHub `aktnb/stream-tweaks` と Modrinth `jWHdryID`。
-将来の任意先は `--curseforge-project <数値ID>` で追加でき、`--curseforge-required` を付けた計画のみ必須とする。
-これらも再開時に同じ値を明示する。adapter 未導入の現段階では、この指定で実際の公開は行わない。
+任意公開先は `--curseforge-project <数値ID>` で追加でき、`--curseforge-required` を付けた計画のみ必須とする。
+これらも再開時に同じ値を明示する。計画 CLI 自体は公開せず、実公開は検証済みbundleと
+[任意adapterの導入確認](curseforge-publication.md)を経て行う。
 
 Release workflow の `operation=plan-new` / `plan-reuse` は、`release_version` と `channel` / `loaders`、
 実行元 branch と開始時の SHA を使う read-only の計画検証。reuse は保存済み JSON を
@@ -103,7 +107,7 @@ Release workflow の `operation=plan-new` / `plan-reuse` は、`release_version`
 計画は7日保持の workflow artifact になるため、再開が必要なら初回 plan を別途保存する。
 ユーザー入力 JSON とこの artifact は公開承認済み成果物として扱わず、fork PR artifact も公開入力に使わない。
 この操作では従来 build / tag / publish / Discord 通知をすべて skip する。
-既定の `operation=legacy` は移行前の公開経路であり、新計画の固定番号・単 Loader stable・reuse をまだ適用しない。
+旧 `operation=legacy` は廃止済みで、公開・再開には検証済みbundleの経路だけを使う。
 
 `operation=prepare-new` は固定計画から全選択 target を read-only build/check し、
 [不変 bundle と manifest](release-bundles.md) を保存する準備経路です。tag・公開・通知は行いません。

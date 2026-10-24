@@ -16,7 +16,8 @@ Active は1系列、Maintenance は最大1系列。Loader ごとの恒常ブラ�
 
 この ADR の採用だけではブランチ作成・default 変更・対応昇格は実施しない。
 main 移行は対象 resolver / CI / release dry-run の整備後に実施する（[#14](https://github.com/aktnb/stream-tweaks/issues/14)）。
-移行までは `26.2` を Active の公開元として扱い、実際の宛先を確認して PR を作る。
+移行準備の台帳は唯一の公開元をmainに予約する。main未作成から検証完了までは新規公開を停止し、
+準備 PR は26.2へ送る。branch作成・default切替の完了は台帳値から推測せず、[移行手順](main-migration.md)の証拠で確認する。
 初期対象は実装済みの 26.2 × Fabric / NeoForge のみ。通常 build 成功と client smoke 成功は区別し、
 実行検証日が不明な行は不明のまま記録する。未検証 MC の範囲対応を metadata へ追加しない。
 初期の既存実装行を supported と記録しても、それは client 起動実証と同義ではない。

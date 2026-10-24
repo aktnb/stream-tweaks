@@ -11,7 +11,8 @@
 
 [対応・保守方針](docs/support-policy.md) と [版番号・公開契約](docs/versioning.md) が開発ルールの ADR です。
 Active は1 MC、Maintenance は最大1 MC。Loader 別の開発ブランチは作りません。
-main 導入前は `26.2`、導入後は main が Active の PR 宛先です。実在する公開元を確認し、
+台帳はmainを唯一の公開元に予約する移行準備中です。main未作成時は新規公開を停止し、準備 PR は `26.2` 宛て、
+移行検証後は main が Active の PR 宛先です。[移行手順と管理確認 gate](docs/main-migration.md)で実際の状態を確認し、
 そこから `feature/<topic>` を作って対象 branch を base に PR を送ってください。バージョンブランチへ直接 push しません。
 
 共通修正は Active で実装後、保守ブランチから `backport/<MC>/<issue>` を作り、
