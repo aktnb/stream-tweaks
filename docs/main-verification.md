@@ -17,17 +17,17 @@ GitHub Actions の 2026-10-24 13:58 UTC readback では、main の run はこの
 
 ## main 向け dispatch 状況
 
-GitHub Actions UI では `Use workflow from: main` を選びます。2026-10-24 15:51 UTC時点で Fabric単target Buildは成功済み、残り4件は未実施です.
+GitHub Actions UI では `Use workflow from: main` を選びます。Fabric／NeoForge単target、Validate all、Release plan-newは成功済みで、prepare-newが未実施です.
 
 | Workflow / operation | 入力 | 結果 |
 | --- | --- | --- |
 | Build | target `26.2-fabric` | [run 40108697819](https://github.com/aktnb/stream-tweaks/actions/runs/40108697819) 成功、source SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`、CI OK成功。artifact `build-artifacts-26.2-fabric-da51f9d7e4217e8734ee17fcc2780164595f6e87`（ID `12565806993`、SHA256 `56cfa47ab35bb8ecf7dec35c099a396848ab897e7fe1f7a2574cf866ae7e9a07`） |
-| Build | target `26.2-neoforge` | 未実施 |
-| Validate supported targets | targets `all` | 未実施 |
-| Release / `plan-new` | version `0.3.3-beta.1`, channel `beta`, loaders `both`, CurseForge required `false` | 未実施 |
+| Build | target `26.2-neoforge` | [run 40109082948](https://github.com/aktnb/stream-tweaks/actions/runs/40109082948) 成功、source SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`、CI OK成功。artifact ID `12565359965`、SHA256 `2847534d5875c3db926941254086a8c2c48898e69e060b7fe074bacb32dc3a3d` |
+| Validate supported targets | targets `all` | [run 40109129345](https://github.com/aktnb/stream-tweaks/actions/runs/40109129345) 成功。Fabric／NeoForge両方をsource SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` で検証、All supported targets OK成功。validation-plan ID `12565857244` / SHA256 `bf3e689594d0421b27cffe551f30fbea67f15b441cceeecb8cae3f5136cc6292`。Fabric artifact ID `12566041366` / SHA256 `8d1d8c509e0224b51dc6b5fac0ef074b187c3a4155ea30d5aa278af8c418dcde`、NeoForge artifact ID `12565489667` / SHA256 `26ed6cdbf12ecc5969fca732a0794bdf16dc86d7ad4c54e9fa7009e826c06439` |
+| Release / `plan-new` | version `0.3.3-beta.1`, channel `beta`, loaders `both`, CurseForge required `false` | [run 40109428132](https://github.com/aktnb/stream-tweaks/actions/runs/40109428132) 成功、source SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`。Compute fixed plan (no publication)成功、他のbuild／staging jobはskip。artifact ID `12565169148` / SHA256 `69008f7bf418a9d20fc05371c35aec9bda90e4b54c0616988e8e002198189d12` |
 | Release / `prepare-new` | version `0.3.3-beta.1`, channel `beta`, loaders `both`, CurseForge required `false` | 未実施 |
 
-Release の2操作は計画／bundle準備までの非公開検証です。tag作成、GitHub Releases／Modrinth公開、Discord通知を実行してはいけません。残る4 dispatchの結果、source SHA、target、artifact ID／hash をこの文書へ追記します。
+Release の2操作は計画／bundle準備までの非公開検証です。tag作成、GitHub Releases／Modrinth公開、Discord通知を実行してはいけません。plan-newは完了し、prepare-newが最後の未実施dispatchです。
 
 ## 公開状態
 
@@ -37,6 +37,6 @@ Release の2操作は計画／bundle準備までの非公開検証です。tag�
 
 ## 完了判定
 
-[PR #21 の main 宛て CI run 40108736789](https://github.com/aktnb/stream-tweaks/actions/runs/40108736789) は head SHA `f1263543323c0c84892b45571265b72387342d86` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。これはmain宛てPR CIの確認ですが、Loaderの単 target／全対象検証の代わりにはなりません.
+[PR #21 の main 宛て CI run 40108971814](https://github.com/aktnb/stream-tweaks/actions/runs/40108971814) は head SHA `5f16f669b82ee18649b65eba77441ed317215085` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。これはmain宛てPR CIの確認ですが、Loaderの単 target／全対象検証の代わりにはなりません.
 
-この PR は引き続き draft です。残り4 dispatchが成功し、artifact／source SHA を照合するまで default branch は変更しません。runbookの他ゲート、最終readback、復旧手順の確認が済むまで Issue #14 を閉じません.
+この PR は引き続き draft です。残り1 dispatch
