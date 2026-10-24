@@ -44,6 +44,6 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 
 ## 完了判定
 
-[PR #21 の main 宛て CI run 40110378316](https://github.com/aktnb/stream-tweaks/actions/runs/40110378316) は head SHA `dcb9ca18a559aa024627c6a32c4a665f02307c83` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。
+[PR #21 の main 宛て CI run 40110957122](https://github.com/aktnb/stream-tweaks/actions/runs/40110957122) は head SHA `ec09989a2a535d3cbf74dc52b42a4e5e5f61973e` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。
 
 5件のmain向けdispatchはすべて成功しました。dispatch後のreadbackでTag／GitHub Releaseは0件、mainと26.2は同じSHA、Rulesetは両branchでactiveかつ `CI OK` 必須でした。defaultはまだ `26.2` です。default切替とその後のref／Ruleset／workflow discovery／Tag／Releaseの最終readbackが済むまでdraftを維持し、Issue #14を閉じません。
