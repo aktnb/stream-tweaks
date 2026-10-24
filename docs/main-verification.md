@@ -1,6 +1,6 @@
 # main 移行検証の途中経過（Issue #14）
 
-この文書は main 作成後の確認記録です。ゲート未完了のため、Issue #14 の完了や公開再開を示しません。現在の default branch は `26.2` のままで、Tag／Release の公開操作は行っていません。実行待ちの workflow 結果が揃ったらこの記録を更新します。
+この文書は main 作成後の検証記録です。main 向けのPR CIと5件のworkflow dispatchは完了しました。default branchの切替と最終readbackが済むまで、Issue #14 の完了や公開再開を示しません。現在のdefault branchは `26.2` で、Tag／Release の公開操作は行っていません。
 
 ## Branch と保護設定
 
@@ -13,7 +13,7 @@
 
 [Build run 40099703840](https://github.com/aktnb/stream-tweaks/actions/runs/40099703840) は ref `main`、source SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` で成功しました。Plan、format、shared tests、script tests と `CI OK` は成功し、loader build matrix は skip でした。branch 作成時の push run なので、この結果は loader の単 target／全対象検証の代わりにはなりません。
 
-GitHub Actions の 2026-10-24 13:58 UTC readback では、main の run はこの初回 push run のみでした。次の main 向け dispatch はまだ未実施です。
+GitHub Actions の 2026-10-24 13:58 UTC readbackは初回push後の履歴です。その後の5件のmain向けdispatch結果は以下に記録します。
 
 ## main 向け dispatch 状況
 
@@ -39,11 +39,11 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 ## 公開状態
 
 - main 作成前の保存済み一覧では Tag 0件、GitHub Release 0件でした。
-- main 作成後の GitHub Releases API readback も空配列でした。今回の検証で公開操作はありません。
-- 完了前に Tag と Release／asset の一覧を再取得し、既存状態が維持されたことを照合します。
+- 5件のmain向けdispatch後、2026-10-24 16:06 UTC頃のreadbackでも matching tags と GitHub Releases はともに0件でした。
+- 検証中に公開操作はありません。default切替後にTag／Release／assetを再取得し、最終照合します。
 
 ## 完了判定
 
-[PR #21 の main 宛て CI run 40109714879](https://github.com/aktnb/stream-tweaks/actions/runs/40109714879) は head SHA `0927f4c304164d2332ee463a2903d42f1f4ce85e` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。
+[PR #21 の最新 main 宛て CI run 40110010992](https://github.com/aktnb/stream-tweaks/actions/runs/40110010992) は head SHA `2ebba9f9c41a653053f3801d4a99ff55246fa82f` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。
 
-5件の main 向けdispatchはすべて成功しました。このPRのdocs更新に伴うCIを再実行中です。Tag／Release一覧、main／26.2のref、Ruleset、default branch の最終readbackと切替が済むまでは draft を維持し、Issue #14 を閉じません。
+5件のmain向けdispatchはすべて成功しました。dispatch後のreadbackでTag／GitHub Releaseは0件、mainと26.2は同じSHA、Rulesetは両branchでactiveかつ `CI OK` 必須でした。defaultはまだ `26.2` です。default切替とその後のref／Ruleset／workflow discovery／Tag／Releaseの最終readbackが済むまでdraftを維持し、Issue #14を閉じません。
