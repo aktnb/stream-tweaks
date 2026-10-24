@@ -3,9 +3,6 @@
 `.github/workflows/build.yml`（**Build**）が対象の MC と変更のある Loader を選び、
 `.github/workflows/target-build.yml` で同じ検証経路を実行します。
 [対応台帳とtarget選択](support-targets.md)が対象選択の基準です。
-この準備変更の台帳はmainを公開元・権威元に予約しています。main未作成・default未切替の間は
-新規公開と全対象dispatchを停止し、[移行手順のgate](main-migration.md)を満たしてから実行します。
-26.2宛ての準備／復旧PRとpushは、公開元を変えずにその固定SHAを品質検証する限定CI経路を使えます。
 
 ## トリガーと固定するソース
 
@@ -188,16 +185,15 @@ python3 -m unittest discover scripts/tests
 ## 全サポート対象の定期・手動検証
 
 `.github/workflows/validate-all.yml`（**Validate supported targets**）は毎週月曜 03:23 UTC と手動で実行します。
-準備台帳の権威元はmainです。以下はmain作成と管理確認後の例であり、未作成時には実行しません。
-移行前26.2上で実施する先行smokeは、その時点の26.2台帳と `--ref 26.2` を使います。
+main 導入前の台帳権威元は `26.2` です。workflow がその default branch に取り込まれた後、次の操作を使います。
 
 ```bash
 # 台帳の全 supported 行
-gh workflow run validate-all.yml --ref main -f targets=all
+gh workflow run validate-all.yml --ref 26.2 -f targets=all
 
 # 明示した subset。単一 target も同じ resolver を使う
-gh workflow run validate-all.yml --ref main -f targets=26.2-fabric,26.2-neoforge
-gh workflow run validate-all.yml --ref main -f targets=26.2-fabric
+gh workflow run validate-all.yml --ref 26.2 -f targets=26.2-fabric,26.2-neoforge
+gh workflow run validate-all.yml --ref 26.2 -f targets=26.2-fabric
 ```
 
 main 移行時は台帳の `authority_branch` と実際の default / 実行 ref を main へ揃えます。
