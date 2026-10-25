@@ -266,6 +266,7 @@ jobs:
       source-sha: ${{ steps.identity.outputs.source-sha }}
       manifest-sha256: ${{ steps.identity.outputs.manifest-sha256 }}
       expected-identity: ${{ steps.identity.outputs.expected-identity }}
+      expected-identity-artifact: ${{ steps.identity.outputs.expected-identity-artifact }}
       bundle-artifact: ${{ steps.identity.outputs.bundle-artifact }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -285,7 +286,7 @@ jobs:
         env:
           OPERATION: ${{ inputs.operation }}
           VERSION: ${{ inputs.release_version }}
-          MC_INPUT: ${{ inputs.release_minecraft }}
+          MC: ${{ inputs.release_minecraft }}
           SOURCE_SHA: ${{ inputs.source_sha || needs.plan.outputs.source-sha }}
           MANIFEST_SHA256: ${{ inputs.manifest_sha256 || needs.bundle-build.outputs.manifest-sha256 }}
           CHANNEL: ${{ inputs.channel }}
@@ -338,7 +339,7 @@ jobs:
                   raise SystemExit('release-new bundle provenance does not match this workflow run')
               if plan['source_sha'] != env['SOURCE_SHA'] or plan['source_branch'] != env['SOURCE_BRANCH']:
                   raise SystemExit('release-new bundle source identity mismatch')
-              if env['MC_INPUT'] and env['MC_INPUT'] != plan['minecraft']:
+              if env['MC'] and env['MC'] != plan['minecraft']:
                   raise SystemExit('release-new Minecraft input does not match gradle.properties')
               loaders = ['fabric', 'neoforge'] if env['LOADERS'] == 'both' else [env['LOADERS']]
               identity = dict(version=env['VERSION'], minecraft=plan['minecraft'], channel=env['CHANNEL'],
@@ -355,7 +356,7 @@ jobs:
                   raise SystemExit('Explicit trusted manifest SHA256 required')
               loaders = ['fabric', 'neoforge'] if env['LOADERS'] == 'both' else [env['LOADERS']]
               # Stored-plan reuse survives catalog/default-branch migration. Only new releases resolve catalog.
-              identity = dict(version=env['VERSION'], minecraft=env['MC_INPUT'], channel=env['CHANNEL'],
+              identity = dict(version=env['VERSION'], minecraft=env['MC'], channel=env['CHANNEL'],
                   source_branch=env['ORIGINAL_SOURCE_BRANCH'] or env['SOURCE_BRANCH'], source_sha=env['SOURCE_SHA'],
                   loaders=rp.normalize_loaders(loaders), curseforge_project=env['CURSEFORGE_PROJECT'] or None,
                   curseforge_required=env['CURSEFORGE_REQUIRED'] == 'true')
@@ -369,13 +370,25 @@ jobs:
                   raise SystemExit('Resume reads durable bundle, not another build run')
               bundle_artifact = ''
           expected_identity = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
+          identity_path = pathlib.Path(env['RUNNER_TEMP']) / 'github-requested-identity.json'
+          identity_path.write_text(expected_identity + '\n', encoding='utf-8')
+          identity_artifact = f"github-requested-identity-{env['RUN_ID']}-{env['RUN_ATTEMPT']}"
           with open(env['GITHUB_OUTPUT'], 'a') as stream:
               stream.write('tag=' + tag + '\n')
               stream.write('source-sha=' + env['SOURCE_SHA'] + '\n')
               stream.write('manifest-sha256=' + env['MANIFEST_SHA256'] + '\n')
               stream.write('expected-identity=' + expected_identity + '\n')
+              stream.write('expected-identity-artifact=' + identity_artifact + '\n')
               stream.write('bundle-artifact=' + bundle_artifact + '\n')
           PY
+
+      - name: Save requested immutable identity
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ steps.identity.outputs.expected-identity-artifact }}
+          path: ${{ runner.temp }}/github-requested-identity.json
+          if-no-files-found: error
+          retention-days: 1
 
   github-stage:
     name: Store/recover verified bundle in GitHub draft
@@ -396,6 +409,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Download requested immutable identity
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.github-inputs.outputs.expected-identity-artifact }}
+          path: ${{ runner.temp }}/expected
       - name: Download original verified build artifact
         if: ${{ inputs.operation == 'github-stage' }}
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -433,7 +451,6 @@ jobs:
           RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
           RELEASE_REPOSITORY: ${{ github.repository }}
-          EXPECTED_IDENTITY: ${{ needs.github-inputs.outputs.expected-identity }}
           OPERATION: ${{ inputs.operation }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -446,9 +463,9 @@ jobs:
           import release_plan as rp
           root = pathlib.Path(os.environ['RUNNER_TEMP'])
           manifest = json.loads((root / 'github-bundle/release-manifest.json').read_text())
-          identity = json.loads(os.environ['EXPECTED_IDENTITY'])
+          identity = json.loads((root / 'expected/github-requested-identity.json').read_text())
           plan = rp.reuse_plan(manifest['plan'], **identity)
-          (root / 'github-expected-plan.json').write_text(rp.canonical_json(plan))
+          (root / 'expected/github-expected-plan.json').write_text(rp.canonical_json(plan))
           if os.environ['OPERATION'] in ('github-stage', 'release-new'):
               run_id = (os.environ['RELEASE_RUN_ID'] if os.environ['OPERATION'] == 'release-new'
                         else os.environ['BUNDLE_RUN_ID'])
@@ -462,7 +479,7 @@ jobs:
           PY
           python3 scripts/publish_github.py stage --bundle "$RUNNER_TEMP/github-bundle" \
             --source-sha "$SOURCE_SHA" --manifest-sha256 "$MANIFEST_SHA256" \
-            --plan "$RUNNER_TEMP/github-expected-plan.json" \
+            --plan "$RUNNER_TEMP/expected/github-expected-plan.json" \
             --state-output "$RUNNER_TEMP/publish-state.json" > "$RUNNER_TEMP/github-stage-result.json"
           {
             echo "GitHub draft staged: \`$TAG\`"
