@@ -5,7 +5,7 @@
 merge後のpush CI [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。`CI OK` も成功し、docs-only変更のためloader build matrixはskipでした。切替後のreadbackでRuleset `23603340` は両branchでactive、strictな必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしを確認しました。mainでは `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認しました。
 2026-10-25の切替後readbackではmatching tags 0件、GitHub Releases 0件、release assets 0件でした。この切替後検証では公開操作を行っていません。main ref、26.2 ref、default、ruleset、workflow discovery、配布履歴の最終確認を記録し、移行gateは完了しています。
 
-[対応方針][対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
+[対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
 ## 実施前の事前確認と現在の権限
 
@@ -192,4 +192,4 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 | default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 2026-10-25にdefault=`main`をreadback。失敗時は本書の復旧手順に従う。切替後の復旧操作はなし |
 | 切替後のworkflow・refs・保護・配布履歴readback | main上のworkflow一覧、branch SHA、ruleset、tags／Releases／assets | `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認。main/26.2 SHAとRuleset 23603340を再確認し、tags／Releases／assetsは0件 |
 
-Issue #14 の切替後readback条件は記録済みです。この変更ではPRをmergeせず、公開操作も行っていません。これらが揃うまで Issue #14 を完了扱いにしません。
+Issue #14 の切替後readback条件は記録済みです。この変更ではPRをmergeせず、公開操作も行っていません。
