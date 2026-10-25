@@ -1,14 +1,16 @@
 # main を Active 公開元へ移す手順（Issue #14）
 
-この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行検証の途中経過](main-verification.md) を参照してください。
-2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` と同じSHAから `main` を作成しました。現在、mainと26.2は同じSHAを指し、default branch はまだ `26.2` です。
-切替前のdispatchゲートと ruleset / classic rule の確認は済み、main上のPR CI／単target／全対象検証／Releaseのplan-new・prepare-newも成功しました。default branch切替と切替後の最終readbackは未実施のため、移行完了扱いにせず新規公開を停止したままにします。
+この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行の切替後検証記録](main-verification.md) を参照してください。
+2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成しました。2026-10-25にPR #21をmergeし、そのmerge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。2026-10-25 05:02:25–05:02:27 UTCのreadback snapshotではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main` でした。これは当該時点の記録で、以後のmergeでmain SHAは進みます。
+PR #21 merge後のpush run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は、run head SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` に対する `Build` workflow（`.github/workflows/build.yml`）のpush runです。2026-10-25 04:46:49–04:48:28 UTCに成功し、`CI OK` はsuccess、docs-only変更のため `Build ${{ matrix.target }}` jobはskipでした。別途、2026-10-25のrepository Contents API readbackでは `.github/workflows` に4ファイルがあることを確認しました。workflowのname/path/state一覧は [切替後検証記録](main-verification.md) のActions API readbackに記載しています。
+2026-10-25 05:02:25–05:02:27 UTCの切替後readback snapshotではmatching tags 0件、GitHub Releases 0件、release assets 0件でした。この時点のmain/26.2 refs、default、Ruleset、workflow一覧、配布履歴の照合を移行gateの完了記録としています。この検証と文書更新では公開操作を行っていません。
+
 [対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
-## 事前確認と現在の権限
+## 実施前の事前確認と現在の権限
 
 2026-10-24 の先行基盤 [PR #18](https://github.com/aktnb/stream-tweaks/pull/18) は26.2へmerge済みです。
-default は `26.2`、その確認時点のHEADは `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d`、mainは未作成です。
+2026-10-24 の実施前readbackでは default は `26.2`、確認時点のHEADは `965c06ba1493d07dfda88430b6d2bcd5dc1c8b8d` で、mainはまだ作成されていませんでした。
 feature branchも実在するため「branchは26.2のみ」とは扱いません。実行直前に必ず取り直します。
 
 | 先行実績 | 記録した SHA の意味 | 結果 |
@@ -34,7 +36,7 @@ deletion / non_fast_forward 禁止、bypassなしでした。必須status check�
 `[{"context":"CI OK","integration_id":15368}]` と確認し、CI OKの必須化も反映されています。
 `strict_required_status_checks_policy=true`、`do_not_enforce_on_create=false` も確認しています。
 接続Appからのclassic branch protection読取は引き続き `403 Resource not accessible by integration` ですが、repository ownerの2026-10-24 UI確認ではclassic ruleなしです。
-このrulesetのreadbackをもって、両branchでCI OKを必須にする設定を確認しました。main作成前にもreadbackを再確認します。
+このrulesetのreadbackで、両branchの `CI OK` 必須設定を確認しました。main作成前に再確認し、2026-10-25の切替後にも同じ設定をreadbackしました。
 
 2026-10-24 12:51 UTC時点のmatching-refs/tagsとRelease一覧は空で、進行中publishはありませんでした。
 `plan-new`（0.3.3-beta.1 / beta / both）のdispatch試行は
@@ -62,9 +64,8 @@ prepare-new artifactの照合結果:
 
 その後、[Release の plan-new run 40098896694](https://github.com/aktnb/stream-tweaks/actions/runs/40098896694) が `workflow_dispatch` で成功しました。実行refは `26.2`、fixed source SHAは `d5d8127b040148ff350c8d08acb70191fac45b23`、release version `0.3.3-beta.1`、channel `beta`、loaders `both` です。Fabric／NeoForge両targetのplanを計算し、Compute fixed plan jobが成功、bundle build／staging／draft保存はskipされました。公開操作はありません。
 plan artifact ID `12561936649`（`release-plan-40098896694-d5d8127b040148ff350c8d08acb70191fac45b23`）のarchive SHA256は `42f49de7820544150ee2190efb763088c6cdad3278cffbab5c0c78bdc7d4a007` です。artifact metadataとrun logでsource branch／SHAおよびtarget集合を照合しました。
-切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new`のdispatch gateは成功runで確認済みです。2026-10-24 13:45 UTCに、確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成し、`26.2` と同じSHAを指すことを再取得しました。初回 push [run 40099703840](https://github.com/aktnb/stream-tweaks/actions/runs/40099703840) は成功し、`CI OK` も成功しましたが、loader build matrix はskipでした。
-main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) のCI run [40110957122](https://github.com/aktnb/stream-tweaks/actions/runs/40110957122) は head SHA `ec09989a2a535d3cbf74dc52b42a4e5e5f61973e` で成功しました。Fabric／NeoForge単target Build、Validate all、Release plan-new／prepare-new の5 dispatchもすべて成功し、各結果とartifact digestは [検証記録](main-verification.md) にあります。すべてsource SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を使い、Release操作ではtag／公開／通知を実行していません。最終readbackとdefault切替は未完了です。
-一覧・公開停止・進行中runは準備mergeとmain作成の直前にも再確認します。
+切替前のValidate all／subset、Build single target、Release `prepare-new`、`plan-new` のdispatch gateは成功runで確認済みです。2026-10-24 13:45 UTCに、確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成し、`26.2` と同じSHAを指すことを再取得しました。初回push run 40099703840は成功し、`CI OK` も成功しましたが、loader build matrixはskipでした。
+main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) は2026-10-25にmergeされ、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。PR #21 merge後のpush run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は成功し、`CI OK` も成功しました。docs-only変更のためloader build matrixはskipでした。PR #21にはFabric／NeoForge単target Build、Validate all、Release `plan-new`／`prepare-new` の5 dispatch成功が記録され、すべてsource SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を使いました。Release操作ではtag／公開／通知を行っていません。runとartifact digestの詳細は [検証記録](main-verification.md) にあります。これらの一覧・公開停止・進行中runは、2026-10-24の準備mergeとmain作成直前に再確認しました。2026-10-25の切替後readbackではtags、Releases、assetsがすべて0件でした。
 
 | 操作 | 必要な repository 権限 | 完了の証拠 |
 | --- | --- | --- |
@@ -78,10 +79,11 @@ main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) のCI r
 [dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)、
 [保護 API](https://docs.github.com/en/rest/branches/branch-protection)、
 [repository 更新 API](https://docs.github.com/en/enterprise-cloud%40latest/rest/repos/repos#update-a-repository)を参照してください。
-現接続には default / 保護設定の更新ツールもないため、この接続だけで移行完了を宣言しません。
-rulesetのreadbackは利用でき、`CI OK` がrequired checksに含まれる実設定はそこで検証します。
+この接続にはdefault／Rulesetの更新権限がありません。repository ownerによる切替後の2026-10-25 05:02 UTC snapshotでdefault=`main`をmetadata readbackしました。Rulesetはread-onlyで取得できます。必須checkを含むRulesetの詳細は、本書上記の切替後readbackを参照してください。
 
-## 切替前のゲート
+## 切替前に実施したゲート（2026-10-24）
+
+以下は移行前に実施した検証と判断の記録です。切替後の完了状態は末尾の受入条件表を参照してください。
 
 - #8 と #13 を含む先行基盤はPR #18で26.2へ導入済み。上記のPR／push CI成功に加え、
   単 target／全対象 dispatch、公開なしplan／prepareの成功runを確認する。
@@ -114,7 +116,9 @@ MC / Java / Loader properties は元の台帳行と照合し、checkout は固�
 26.2 の新規公開計画はmain切替後に拒否します。全対象 resolver も公開元mainを解決するため、
 旧 branch をmainの検証結果に代用しません。既存固定 plan の source branch / SHA も書き換えません。
 
-## 公開元を先に切替えてから main を作る
+## 切替時に実施した手順（2026-10-24）
+
+以下は実施時に使った順序の記録です。main作成後の検証と2026-10-25のdefault切替・最終readbackは上の記録および末尾の表に反映しています。
 
 1. 26.2 を base とする準備 PR を作る。`support-targets.json` の `authority_branch` と、
    現行26.2の両 Loader 行の `source_branch` を **すべて `main`** にする。
@@ -141,11 +145,8 @@ MC / Java / Loader properties は元の台帳行と照合し、checkout は固�
 6. 成功した run の full source SHA／MC／Loader／実 JDK／結果を保存する。
    全対象の resolver が main を一度だけ解決し、同じ固定 SHA を両 Loader に使うこと、
    台帳がmain以外の同MC公開元を示さないことを確認する。
-7. main と26.2の保護設定を読戻し、main の `CI OK` が必須である実設定を確認する。
-   GitHub Actions由来の正しい check context を選び、他のレビュー・更新制約も保存する。
-   その後にだけ default をmainへ変更し、default／workflow discovery／保護を再読込する。
-8. 26.2・Tag・Release・asset の保存済み一覧を再照合し、削除・rename・差替えがないことを記録する。
-   成功記録が揃ったら新規公開停止を解除する。残した26.2は休止中の履歴であり二重公開元ではない。
+7. 切替前にmainと26.2の保護設定をreadbackし、mainの `CI OK` 必須、GitHub Actions由来のcheck context、レビュー・更新制約を確認しました。2026-10-25にdefaultをmainへ切替え、その後repository metadataとRulesetをreadbackし、Contents APIで `.github/workflows` の一覧を確認しました。
+8. 2026-10-25に26.2・Tag・Release・assetの一覧を再照合し、削除・rename・差替えがないことを確認しました。matching tags、GitHub Releases、release assetsは0件です。切替後readbackを移行gateの完了記録に含めました。この検証では公開操作を行っていません。残した26.2は休止中の履歴であり二重公開元ではありません。
 
 ## 失敗時の公開停止と復旧
 
@@ -178,12 +179,13 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 両方で Python 全200件が成功しました。共有作業ツリーの実台帳は変更していません。
 変更した2 workflow の YAML 構文と5つの shell block も検査済みです。
 
-| #14 の受入条件 | 保存すべき証拠 | 現時点 |
+| #14 の受入条件 | 保存すべき証拠 | 2026-10-25 05:02 UTC切替後readback |
 | --- | --- | --- |
-| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | PR #21 run 40110957122成功（head `ec09989a2a535d3cbf74dc52b42a4e5e5f61973e`、docs-onlyでloader matrix skip）。5 dispatch成功、source SHA da51f9d…、JDK Temurin 25.0.4。詳細hashはmain-verification.md |
-| 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | mainのauthority/sourceはmain、26.2とmainのrefは同じSHA。defaultは26.2のまま |
-| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 5件のmain向けdispatch後のreadbackでmatching tags／GitHub Releasesとも0件。default切替後のTag／Release／asset最終再照合は未実施 |
-| CI OK必須と対象保護 | ruleset実設定／owner UI readback | rulesetは両branch対象active、CI OK必須、deletion/non_fast_forward禁止。classic ruleなしをowner UIで確認 |
-| default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 手順あり。default切替は未実施、復旧操作なし |
+| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | main宛てPR #21のmerge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はrun head SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` で成功、`CI OK` success、docs-onlyのためmatrix build skip。5件の事前dispatch成功とartifact digestはmain-verification.md |
+| 同MCの公開元main一つ | main・26.2両catalogの公開元と検証出力 | authority/sourceはmain、両targetのsource_branchはmain。2026-10-25 05:02:25–05:02:27 UTCのref snapshotはmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main`。後続merge後の現在refはAPIで再取得する |
+| 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 2026-10-25の切替後readbackでmain/26.2 refsを照合し、matching tags 0件、GitHub Releases 0件、assets 0件を確認 |
+| CI OK必須と対象保護 | ruleset実設定／owner UI readback | 切替後Ruleset readbackは上記のbranch保護記録を参照。classic ruleなしは2026-10-24にowner UI確認 |
+| default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 2026-10-25 05:02:25–05:02:27 UTC snapshotでdefault=`main`をreadback。失敗時は本書の復旧手順に従う。切替後の復旧操作はなし |
+| 切替後のworkflow・refs・保護・配布履歴readback | Actions API name/path/state、Contents API file listing、ref snapshot、ruleset、配布履歴 | 2026-10-25 05:02 UTCのActions API一覧はmain-verification.mdに記録。Contents APIはworkflowファイルの存在を確認。run 40163126160はPR #21 merge後のBuild push run。ref/default snapshot、Ruleset、tags／Releases／assetsは同時点で照合済み |
 
-これらが揃うまで Issue #14 を完了扱いにしません。
+Issue #14 の切替後readback条件は記録済みです。この検証と文書更新では公開操作を行っていません。
