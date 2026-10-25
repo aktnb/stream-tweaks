@@ -1,15 +1,27 @@
 # main 移行の切替後検証記録（Issue #14）
 
-この文書はmain切替後の検証記録です。2026-10-25にPR #21がmergeされ、default branchは `main` へ切替済みです。切替後のref・workflow・ruleset・配布履歴のreadbackを完了しました。merge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は成功し、`CI OK` も成功しました。docs-only変更のためloader build matrixはskipでした。
-mainのmerge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持しています。切替後readbackでmatching tags、GitHub Releases、release assetsはいずれも0件で、公開操作は行っていません。
+この文書はmain切替後の検証記録です。2026-10-25 05:02:25–05:02:27 UTCのrepository metadata/ref snapshotではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`（PR #21 merge commit）、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87` でした。この値は当該時点の記録で、後続のmerge/push後はlive refを再取得してください。切替後のRuleset・workflow一覧・配布履歴も同時点でreadbackしました。merge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はsuccess、`CI OK` success、docs-only変更のためmatrix build jobはskipでした。matching tags、GitHub Releases、release assetsは0件で、検証・記録更新では公開操作を行っていません。
 
 ## Branch と保護設定
 
-- `main` は2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21をmergeしました。現在のmain SHAは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は作成時のSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` のままです。切替後readbackで両refを確認しました。
-- repository metadata の default branch は `main` です。2026-10-25の切替後にreadbackしました。
-- Ruleset `23603340`（`Push Protection`）は Active、対象は `refs/heads/main` と `refs/heads/26.2` です。required status check は `CI OK`（integration ID `15368`）、strict=true、bypass actorなしです。deletion と non-fast-forward も禁止されています。Ruleset API の初回readbackは2026-10-24 13:58 UTC時点です。2026-10-25の切替後readbackでも同じ保護を確認しました。
+- `main` は2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21をmergeしました。2026-10-25 05:02:25–05:02:27 UTCのreadback snapshotではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87` でした。後続のmain SHAはその後のmerge/pushで進みます。
+- 2026-10-25 05:02:25–05:02:27 UTCのrepository metadata snapshotではdefault branchは `main` でした。
+- Ruleset `23603340`（`Push Protection`）の2026-10-25 05:02:25–05:02:27 UTC readbackでは、対象は `refs/heads/main` と `refs/heads/26.2`、必須 `CI OK`（integration ID `15368`、strict=true）、bypassなし、deletion/non-fast-forward禁止でした。初回readbackは2026-10-24 13:58 UTCです。
 - repository owner は2026-10-24のUI確認で、`main` と `26.2` に適用される classic branch protection ruleがないことを確認しました。Rulesetは別途上記のとおり有効です。
-- 2026-10-25のrepository Contents API readbackでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` の4ファイルがあることを確認しました。別途、切替後push run 40163126160は `Build` workflow（`.github/workflows/build.yml`）で、`CI OK` はsuccess、docs-onlyのためmatrix build jobはskipでした。
+## 切替後のworkflow一覧
+
+2026-10-25 05:02:25–05:02:27 UTCのActions API workflow一覧:
+
+| name | path | state |
+| --- | --- | --- |
+| Build | `.github/workflows/build.yml` | active |
+| Release | `.github/workflows/release.yml` | active |
+| Target build | `.github/workflows/target-build.yml` | active |
+| Validate supported targets | `.github/workflows/validate-all.yml` | active |
+
+同時点のrepository Contents APIでは `.github/workflows` directoryに上記4ファイルが存在しました。これはファイルの存在確認で、Actions APIのname/path/state一覧とは別のreadbackです。
+
+切替後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は `Build` workflow（`.github/workflows/build.yml`）の別個の実行記録です。`CI OK` success、docs-only変更のためmatrix build jobはskipでした。
 
 ## main 初回 push の CI
 
@@ -40,7 +52,7 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 
 ## 切替後の公開状態
 
-- 2026-10-25の切替後readbackでmatching tags 0件、GitHub Releases 0件、release assets 0件を確認しました。
+- 2026-10-25 05:02:25–05:02:27 UTCの切替後readback snapshotでmatching tags 0件、GitHub Releases 0件、release assets 0件を確認しました。
 - main向けdispatchおよび切替後の検証でTag、GitHub Release、Modrinth公開、Discord通知を実行していません。
 - PR #21の検証内容とartifact digestは下記のとおりです。これらは切替前のmain上で実行した確認で、使用source SHAは `da51f9d7e4217e8734ee17fcc2780164595f6e87` です。
 
@@ -48,6 +60,6 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 
 PR #21はmerge済みで、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。
 
-切替後readbackではrepository default=`main`、main SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`、Ruleset 23603340 active／strict必須 `CI OK`／deletion・non-fast-forward禁止／bypassなしを確認しました。repository Contents API readbackでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` があることを確認しました。push run 40163126160は `Build` workflow（`.github/workflows/build.yml`）の実行で、`CI OK` success、matrix build skipでした。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
+2026-10-25 05:02:25–05:02:27 UTC snapshotのrepository metadata/refではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87` を確認しました。後続のmerge/push後はlive refを再取得してください。Ruleset 23603340も同時点でactive、strict必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしでした。workflow API一覧のname/path/stateは上記表、Contents APIは4ファイルの存在を別途確認しました。切替後push run 40163126160はBuild workflowのsuccess runで、`CI OK` success、matrix build skipです。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
 
 切替前の5件のmain向けdispatchはすべて成功しています。これによりIssue #14の切替後readback条件を満たしています。この検証と文書更新では公開操作を行っていません。
