@@ -1,6 +1,6 @@
 # main を Active 公開元へ移す手順（Issue #14）
 
-この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行検証の途中経過](main-verification.md) を参照してください。
+この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行の切替後検証記録](main-verification.md) を参照してください。
 2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成しました。2026-10-25にmain宛てdraft PR #21をmergeし、現在のmainはmerge commit `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は作成時のSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持しています。repository default branch は `main` です。
 merge後のpush CI [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。`CI OK` も成功し、docs-only変更のためloader build matrixはskipでした。切替後のreadbackでRuleset `23603340` は両branchでactive、strictな必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしを確認しました。mainでは `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認しました。
 2026-10-25の切替後readbackではmatching tags 0件、GitHub Releases 0件、release assets 0件でした。この切替後検証では公開操作を行っていません。main ref、26.2 ref、default、ruleset、workflow discovery、配布履歴の最終確認を記録し、移行gateは完了しています。
