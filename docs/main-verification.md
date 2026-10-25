@@ -9,7 +9,7 @@ mainのmerge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `
 - repository metadata の default branch は `main` です。2026-10-25の切替後にreadbackしました。
 - Ruleset `23603340`（`Push Protection`）は Active、対象は `refs/heads/main` と `refs/heads/26.2` です。required status check は `CI OK`（integration ID `15368`）、strict=true、bypass actorなしです。deletion と non-fast-forward も禁止されています。Ruleset API の初回readbackは2026-10-24 13:58 UTC時点です。2026-10-25の切替後readbackでも同じ保護を確認しました。
 - repository owner は2026-10-24のUI確認で、`main` と `26.2` に適用される classic branch protection ruleがないことを確認しました。Rulesetは別途上記のとおり有効です。
-- 切替後のmain workflow discoveryでは `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認しました。
+- 2026-10-25のrepository Contents API readbackでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` の4ファイルがあることを確認しました。別途、切替後push run 40163126160は `Build` workflow（`.github/workflows/build.yml`）で、`CI OK` はsuccess、docs-onlyのためmatrix build jobはskipでした。
 
 ## main 初回 push の CI
 
@@ -48,6 +48,6 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 
 PR #21はmerge済みで、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。
 
-切替後readbackではrepository default=`main`、main SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`、Ruleset 23603340 active／strict必須 `CI OK`／deletion・non-fast-forward禁止／bypassなしを確認しました。main workflow discoveryでは `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認しました。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
+切替後readbackではrepository default=`main`、main SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`、Ruleset 23603340 active／strict必須 `CI OK`／deletion・non-fast-forward禁止／bypassなしを確認しました。repository Contents API readbackでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` があることを確認しました。push run 40163126160は `Build` workflow（`.github/workflows/build.yml`）の実行で、`CI OK` success、matrix build skipでした。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
 
-切替前の5件のmain向けdispatchはすべて成功しています。これによりIssue #14の切替後readback条件を満たしています。公開操作は行っておらず、本記録の更新PRもmergeしません。
+切替前の5件のmain向けdispatchはすべて成功しています。これによりIssue #14の切替後readback条件を満たしています。この検証と文書更新では公開操作を行っていません。
