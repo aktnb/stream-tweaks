@@ -1,6 +1,6 @@
 # main 移行の切替後検証記録（Issue #14）
 
-この文書はmain切替後の検証記録です。2026-10-25 05:02:25–05:02:27 UTCのrepository metadata/ref snapshotではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`（PR #21 merge commit）、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87` でした。この値は当該時点の記録で、後続のmerge/push後はlive refを再取得してください。切替後のRuleset・workflow一覧・配布履歴も同時点でreadbackしました。merge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はsuccess、`CI OK` success、docs-only変更のためmatrix build jobはskipでした。matching tags、GitHub Releases、release assetsは0件で、検証・記録更新では公開操作を行っていません。
+この文書はmain切替後の検証記録です。2026-10-25 05:02:25–05:02:27 UTCのrepository metadata/ref snapshotではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`（PR #21 merge commit）、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87` でした。この値は当該時点の記録で、後続のmerge/push後はlive refを再取得してください。切替後のRuleset・workflow一覧・配布履歴も同時点でreadbackしました。PR #21 merge後のpush run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はsuccess、`CI OK` success、docs-only変更のためmatrix build jobはskipでした。matching tags、GitHub Releases、release assetsは0件で、検証・記録更新では公開操作を行っていません。
 
 ## Branch と保護設定
 
@@ -58,7 +58,7 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 
 ## 完了判定と切替後readback
 
-PR #21はmerge済みで、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。
+PR #21はmerge済みで、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。PR #21 merge後のpush run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。
 
 2026-10-25 05:02:25–05:02:27 UTC snapshotのrepository metadata/refではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87` を確認しました。後続のmerge/push後はlive refを再取得してください。Ruleset 23603340も同時点でactive、strict必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしでした。workflow API一覧のname/path/stateは上記表、Contents APIは4ファイルの存在を別途確認しました。PR #21 merge後のpush run 40163126160はBuild workflowのsuccess runで、`CI OK` success、matrix build skipです。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
 
