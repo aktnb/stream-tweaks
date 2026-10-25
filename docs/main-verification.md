@@ -1,13 +1,15 @@
 # main 移行検証の途中経過（Issue #14）
 
-この文書は main 作成後の検証記録です。main 向けのPR CIと5件のworkflow dispatchは完了しました。default branchの切替と最終readbackが済むまで、Issue #14 の完了や公開再開を示しません。現在のdefault branchは `26.2` で、Tag／Release の公開操作は行っていません。
+この文書はmain切替後の検証記録です。2026-10-25にPR #21がmergeされ、default branchは `main` へ切替済みです。切替後のref・workflow・ruleset・配布履歴のreadbackを完了しました。merge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は成功し、`CI OK` も成功しました。docs-only変更のためloader build matrixはskipでした。
+mainのmerge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持しています。切替後readbackでmatching tags、GitHub Releases、release assetsはいずれも0件で、公開操作は行っていません。
 
 ## Branch と保護設定
 
-- `main` は `26.2` の確認済み最新 SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成されました。2026-10-24 の readback で両 branch がこの SHA を指すことを確認しました。
-- repository metadata の default branch は引き続き `26.2` です。default 切替は未実施です。
-- Ruleset `23603340`（`Push Protection`）は Active、対象は `refs/heads/main` と `refs/heads/26.2` です。required status check は `CI OK`（integration ID `15368`）、strict=true、bypass actorなしです。deletion と non-fast-forward も禁止されています。Ruleset API の readback は 2026-10-24 13:58 UTC 時点でこの設定を返しました。
-- repository owner の UI 確認で、`main` と `26.2` に適用される classic branch protection rule はありませんでした。Ruleset は別途上記のとおり有効です。
+- `main` は2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21をmergeしました。現在のmain SHAは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は作成時のSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` のままです。切替後readbackで両refを確認しました。
+- repository metadata の default branch は `main` です。2026-10-25の切替後にreadbackしました。
+- Ruleset `23603340`（`Push Protection`）は Active、対象は `refs/heads/main` と `refs/heads/26.2` です。required status check は `CI OK`（integration ID `15368`）、strict=true、bypass actorなしです。deletion と non-fast-forward も禁止されています。Ruleset API の初回readbackは2026-10-24 13:58 UTC時点です。2026-10-25の切替後readbackでも同じ保護を確認しました。
+- repository owner は2026-10-24のUI確認で、`main` と `26.2` に適用される classic branch protection ruleがないことを確認しました。Rulesetは別途上記のとおり有効です。
+- 切替後のmain workflow discoveryでは `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認しました。
 
 ## main 初回 push の CI
 
@@ -36,14 +38,16 @@ artifact archive SHA256:
 
 Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, version `0.3.3-beta.1`, channel `beta`, loaders `both`, and CurseForge required `false`. `prepare-new` verified the fixed plan and bundle; no tag, GitHub Release, Modrinth publication, or Discord notification was performed.
 
-## 公開状態
+## 切替後の公開状態
 
-- main 作成前の保存済み一覧では Tag 0件、GitHub Release 0件でした。
-- 5件のmain向けdispatch後、2026-10-24 16:06 UTC頃のreadbackでも matching tags と GitHub Releases はともに0件でした。
-- 検証中に公開操作はありません。default切替後にTag／Release／assetを再取得し、最終照合します。
+- 2026-10-25の切替後readbackでmatching tags 0件、GitHub Releases 0件、release assets 0件を確認しました。
+- main向けdispatchおよび切替後の検証でTag、GitHub Release、Modrinth公開、Discord通知を実行していません。
+- PR #21の検証内容とartifact digestは下記のとおりです。これらは切替前のmain上で実行した確認で、使用source SHAは `da51f9d7e4217e8734ee17fcc2780164595f6e87` です。
 
-## 完了判定
+## 完了判定と切替後readback
 
-[PR #21 の main 宛て CI run 40110957122](https://github.com/aktnb/stream-tweaks/actions/runs/40110957122) は head SHA `ec09989a2a535d3cbf74dc52b42a4e5e5f61973e` で成功しました。Plan、format、shared tests、script tests、`CI OK` が成功し、docs-only差分のためloader build matrixはskipでした。
+PR #21はmerge済みで、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。
 
-5件のmain向けdispatchはすべて成功しました。dispatch後のreadbackでTag／GitHub Releaseは0件、mainと26.2は同じSHA、Rulesetは両branchでactiveかつ `CI OK` 必須でした。defaultはまだ `26.2` です。default切替とその後のref／Ruleset／workflow discovery／Tag／Releaseの最終readbackが済むまでdraftを維持し、Issue #14を閉じません。
+切替後readbackではrepository default=`main`、main SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87`、Ruleset 23603340 active／strict必須 `CI OK`／deletion・non-fast-forward禁止／bypassなしを確認しました。main workflow discoveryでは `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` を確認しました。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
+
+切替前の5件のmain向けdispatchはすべて成功しています。これによりIssue #14の切替後readback条件を満たしています。公開操作は行っておらず、本記録の更新PRもmergeしません。
