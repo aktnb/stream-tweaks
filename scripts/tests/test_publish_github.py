@@ -259,7 +259,7 @@ class GitHubPublishTest(unittest.TestCase):
         self.assertIn('group: release-${{ needs.github-inputs.outputs.tag }}', stage)
         self.assertIn('cancel-in-progress: false', stage)
         self.assertIn('release_bundle.py verify', stage)
-        self.assertIn("manifest['provenance']['workflow']['run_id']", stage)
+        self.assertIn("workflow = manifest['provenance']['workflow']", stage)
         self.assertIn("workflow['run_id'] != os.environ['RELEASE_RUN_ID']", stage)
         self.assertNotIn('./gradlew', stage)
         self.assertIn('rp.reuse_plan', stage)
