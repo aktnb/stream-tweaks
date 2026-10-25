@@ -230,12 +230,16 @@ class ModrinthPublishTest(unittest.TestCase):
         workflow = (pathlib.Path(pm.__file__).parent.parent / '.github/workflows/release.yml').read_text()
         self.assertNotIn('mc-publish@', workflow)
         self.assertNotIn('legacy', workflow)
-        before_publish, publish = workflow.split('      - id: publish\n', 1)
+        before_publish, publish_job = workflow.split('\n  publish:\n', 1)
         self.assertNotIn('MODRINTH_TOKEN:', before_publish)
-        self.assertIn("if: ${{ inputs.operation == 'publish' }}", publish)
-        self.assertIn('publish_modrinth.py publish', publish)
-        self.assertIn("steps.publish.outcome == 'success'", publish)
-        self.assertIn('if: always()', publish)
+        self.assertIn("if: ${{ inputs.operation == 'release-new' || inputs.operation == 'publish' }}", publish_job)
+        self.assertIn('name: release-publish', publish_job)
+        self.assertEqual(publish_job.count('      - id: publish\n'), 1)
+        publish_step = publish_job.split('      - id: publish\n', 1)[1]
+        self.assertIn('publish_modrinth.py publish', publish_step)
+        self.assertIn("steps.publish.outcome == 'success'", publish_step)
+        self.assertIn('if: always()', publish_step)
+        self.assertIn('MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}', publish_step)
         self.assertNotIn('rp.build_plan', workflow.split('  github-inputs:\n', 1)[1])
 
     def test_actual_workflow_identity_scripts_resume_old_plan_after_main_migration(self):
@@ -247,6 +251,7 @@ class ModrinthPublishTest(unittest.TestCase):
                    SOURCE_SHA='a' * 40, MANIFEST_SHA256=self.options['expected_manifest_sha256'], CHANNEL='release',
                    LOADERS='both', SOURCE_BRANCH='main', ORIGINAL_SOURCE_BRANCH='26.2', BUNDLE_RUN_ID='',
                    CURSEFORGE_PROJECT='', CURSEFORGE_REQUIRED='false', GITHUB_TOKEN='',
+                   RUN_ID='12345', RUN_ATTEMPT='1',
                    RUNNER_TEMP=str(self.fixture.directory), GITHUB_OUTPUT=str(self.fixture.directory / 'outputs'))
         root = pathlib.Path(pm.__file__).parent.parent
         result = subprocess.run([__import__('sys').executable, '-c', gate_code], env=env, cwd=root,

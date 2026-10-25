@@ -111,3 +111,9 @@ Release workflow の `operation=plan-new` / `plan-reuse` は、`release_version`
 
 `operation=prepare-new` は固定計画から全選択 target を read-only build/check し、
 [不変 bundle と manifest](release-bundles.md) を保存する準備経路です。tag・公開・通知は行いません。
+
+通常公開は `operation=release-new` を `main` ref から1回 dispatch します。同じ run で固定 plan／bundle を作成し、
+GitHub draft に保管後、`release-publish` Environment の Required reviewers による承認を待ちます。
+承認後に保存済み draft bundle を再検証し、既存 publish coordinator が不足先を照合して finalize します。
+Environment の main-only branch policy と Required reviewers は[公開・復旧ガイド](release-workflow.md)に従って
+事前に設定します。途中で失敗した場合は全 workflow を再ビルドせず、保存済み bundle に対する回復経路を使います。

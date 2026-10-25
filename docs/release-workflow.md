@@ -10,6 +10,10 @@ Release は純 SemVer × Minecraft、同 MC の Loader は同じ full source SHA
 既存 tag／Release／version を削除・差替えせず、同じ bundle で不足先だけを再開します。
 GitHub と Modrinth の間に原子的公開はなく、片方だけ成功している時間はあり得ます。
 
+通常の新規公開は `release-new` を1回 dispatch します。build と GitHub draft 保管の後、
+`release-publish` Environment の承認を受けてから同じ bundle を公開します。
+成功時の run ID／SHA／manifest hash の転記は不要です。手動の `github-stage`／`github-resume`／`publish` は回復用に残します。
+
 詳細は[版番号契約](versioning.md)、[bundle](release-bundles.md)、
 [GitHub 保管](github-release-staging.md)、[Modrinth 公開](modrinth-publication.md)を参照してください。
 CurseForge は未設定なら対象外です。任意 adapter の導入は #17 と
@@ -31,6 +35,7 @@ Upload 用 `CURSEFORGE_TOKEN` と project／file 照合用 `CURSEFORGE_API_KEY` 
 | workflow の手動起動 | 操作者の Actions write | dispatch 失敗。公開は開始しない |
 | plan／prepare | Contents read、対象 JDK／固定 Gradle・依存を取得可能 | build/check で停止。tag を作らない |
 | GitHub 保管・再開・finalize | 自動 `GITHUB_TOKEN` の Contents write、Actions read | run／asset を照合できなければ停止 |
+| publish 承認 | `release-publish` Environment の Required reviewers と main の deployment branch policy | workflow を開始する前に設定。不足なら承認ゲートとして機能しない |
 | Modrinth | `MODRINTH_TOKEN`。対象 project `jWHdryID` の version 作成権限と照合 API の利用権限 | publish は失敗し draft を維持 |
 | Discord | 任意の `DISCORD_WEBHOOK_URL` | 未設定なら通知だけ skip。設定時も finalize 成功後だけ通知 |
 
@@ -41,99 +46,79 @@ secret 名だけなら `gh secret list --repo aktnb/stream-tweaks --json name --
 ローカル adapter は `GITHUB_TOKEN`／`MODRINTH_TOKEN` を環境からのみ読みます。
 権限不足を検証無効化・別 API の迂回で通しません。
 
-## 1. 公開せず準備する
+## `release-publish` Environment の一度だけ設定
 
-変更を公開元へ PR で取り込み、`./gradlew build --dependency-verification=strict` を確認します。
-alpha／beta は `0.3.4-alpha.1`／`0.3.4-beta.1` のように番号まで指定し、再実行でも採番し直しません。
-stable は対応する `CHANGELOG.md` の版セクションが必要です。必要なら準備 PR で次を実行します。
+GitHub repository の `Settings > Environments` で `release-publish` を作成し、次を保存します。
+
+1. **Required reviewers** に公開を承認するユーザーまたは team を指定します。
+2. **Deployment branches and tags** を「Selected branches and tags」にし、`main` のみを許可します。
+3. solo 運用では `Prevent self-review` を有効にしません。別の担当者が承認する運用なら有効にできます。
+
+Environment が存在しない、または Required reviewers が未設定の場合、workflow は承認待ちにならず進みます。
+初回 dispatch 前に Settings の保存内容を確認してください。workflow から GitHub Settings は変更しません。
+`release-new` は承認前に annotated tag と GitHub draft を作ります。承認を拒否した場合も削除・差替えはせず、
+draft と tag は調査用に残ります。
+
+## 1. 公開元と版を準備する
+
+変更を `main` へ merge します。`release-new` が選択 Loader の build/check を dependency verification strict で実行します。
+alpha／beta は `0.3.4-alpha.1`／`0.3.4-beta.1` のように番号まで固定します。
+stable は対応する `CHANGELOG.md` の版セクションを先に用意します。
 
 ```sh
 python3 scripts/changelog_tool.py release --version 0.3.4 --update-file
 python3 scripts/changelog_tool.py read --version 0.3.4
 ```
 
-以後の例は同じ shell で使います。`RELEASE_REF` と元の `RELEASE_SOURCE_BRANCH` は実在する公開元に合わせます。
+## 2. 通常公開は1回起動
+
+GitHub Actions の `Release` を `main` ref から1回実行します。Web UI では `operation=release-new` を選び、
+version／channel／loaders を入力します。CLI の例:
 
 ```sh
-RELEASE_REF=main
-RELEASE_SOURCE_BRANCH=main
-RELEASE_VERSION=0.3.4-beta.1
-RELEASE_MC=26.2
-RELEASE_CHANNEL=beta
-RELEASE_LOADERS=both
-
-gh workflow run release.yml --repo aktnb/stream-tweaks --ref "$RELEASE_REF" \
-  -f operation=prepare-new -f channel="$RELEASE_CHANNEL" -f loaders="$RELEASE_LOADERS" \
-  -f release_version="$RELEASE_VERSION"
+gh workflow run release.yml --repo aktnb/stream-tweaks --ref main \
+  -f operation=release-new -f channel=beta -f loaders=both \
+  -f release_version=0.3.4-beta.1
 gh run list --repo aktnb/stream-tweaks --workflow release.yml --limit 5
 ```
 
-実行を ID で特定し、成功 summary の **run ID・full source SHA・manifest SHA256** と固定 plan を保存します。
-`plan-new` は計画のみ、`plan-reuse` は保存 JSON の一致確認のみで、公開入力や承認の代替ではありません。
-`prepare-new` は read-only build/check 後に通常 JAR・notes・plan・manifest を作り、
-`release-bundle-<run ID>-<source SHA>` に30日保存します。tag／公開／通知は行いません。
-alpha／beta の notes は固定 SHA の Unreleased 全文、stable は版セクションです。
-`[fabric]`／`[neoforge]`／`[fabric,neoforge]` の filter を再利用し、タグなし項目は共通です。
+`release-new` は固定 plan → build/check → bundle 検証 → annotated tag／GitHub draft 保管を行います。
+source SHA と manifest SHA256 は run 内で検証・受け渡しするため、通常時に転記する必要はありません。
+stage の後、`Publish <tag>` job が `release-publish` Environment の承認待ちになります。
+run summary と draft Release を確認し、GitHub Actions run の **Review deployments** から承認すると、
+publish job が draft から bundle を復元・再検証して配布先を照合し、不足先だけを公開します。
+必須先がすべて検証できた場合だけ GitHub draft を解除し、成功通知を行います。
 
-## 2. 検証済み bundle を draft に保管する
+`prepare-new` は従来どおり公開なしの build/check 用です。`plan-new`／`plan-reuse` は計画確認だけを行います。
+新規公開が失敗した場合、同じ beta 番号を変えず同じ版の bundle を再開します。`0.3.4-beta.1` の再開で `.2` にしません。
+stable 単 Loader も同じ `release-new` を使えます。公開後に別 Loader を追加するときは新 PATCH を計画します。
 
-次の3値は信頼する成功 prepare の記録から置き換えます。例示値のまま実行しません。
+## 3. 失敗・部分成功からの再開
 
-```sh
-PREPARE_RUN_ID='成功したprepareのrun番号'
-RELEASE_SOURCE_SHA='そのprepareの40桁sourceSHA'
-RELEASE_MANIFEST_SHA256='そのsummaryの64桁manifestSHA256'
+publish が一時エラーで止まった場合、Actions の **失敗した `Publish <tag>` job のみ**を再実行します。
+その job は成功済み stage をやり直さず、同じ GitHub draft から元 bundle を復元して hash と plan を再検証します。
+全 job の再実行は新しい build provenance を作るため使いません。GitHub tag／draft は削除・差替えしません。
 
-gh run view "$PREPARE_RUN_ID" --repo aktnb/stream-tweaks \
-  --json databaseId,event,headSha,conclusion,url
-gh workflow run release.yml --repo aktnb/stream-tweaks --ref "$RELEASE_REF" \
-  -f operation=github-stage -f channel="$RELEASE_CHANNEL" -f loaders="$RELEASE_LOADERS" \
-  -f release_version="$RELEASE_VERSION" -f release_minecraft="$RELEASE_MC" \
-  -f release_source_branch="$RELEASE_SOURCE_BRANCH" -f source_sha="$RELEASE_SOURCE_SHA" \
-  -f manifest_sha256="$RELEASE_MANIFEST_SHA256" -f bundle_run_id="$PREPARE_RUN_ID"
-```
+手動の `github-stage`／`github-resume`／`publish` も固定 bundle の回復用に維持しています。
+`publish` は直接起動しても `release-publish` Environment 承認後に公開します。
+`github-resume` は bundle の復元・保管だけを行い、Modrinth へ公開しません。
+これらの回復経路では、元 plan の version／MC／Loader 集合／source branch・SHA／manifest hash をそのまま使います。
 
-stage は同 repository の成功した dispatch／release workflow／元 branch・SHA・run provenance を照合します。
-fork／PR artifact を入力にできません。全 bundle の検証後だけ annotated tag を作り、draft に保管します。
-同じ peeled SHA の tag・同じバイナリの asset は再利用し、相違・余分な未知 asset・照合不能は停止します。
-全ファイルを再取得して hash が一致するまで永続保管成功としません。ここでは外部公開も draft 解除もしません。
-
-## 3. 公開・部分成功からの再開・finalize
-
-stage 成功後は、毎回同じ入力で `publish` を実行します。新しい prepare は行いません。
-
-```sh
-gh workflow run release.yml --repo aktnb/stream-tweaks --ref "$RELEASE_REF" \
-  -f operation=publish -f channel="$RELEASE_CHANNEL" -f loaders="$RELEASE_LOADERS" \
-  -f release_version="$RELEASE_VERSION" -f release_minecraft="$RELEASE_MC" \
-  -f release_source_branch="$RELEASE_SOURCE_BRANCH" -f source_sha="$RELEASE_SOURCE_SHA" \
-  -f manifest_sha256="$RELEASE_MANIFEST_SHA256"
-```
-
-publish は draft から同 bundle を復元し、保存 plan と明示入力を照合します。最新台帳で再計画しません。
 各 Modrinth version の project・MC・Loader・version・契約 metadata・通常 JAR の SHA512 を再照会します。
-一致する既存 version は POST せず、**未 POST の不足先**だけ追加します。
-全 required destination を独立照合した後だけ finalize で GitHub draft を解除し、成功通知を行います。
-無条件の finalize CLI はありません。`publish` がこの gate を持つ coordinator です。
-
-例えば Fabric 成功後、NeoForge がまだ POST される前に中断した場合、同入力の再実行で Fabric を再利用し、
-NeoForge だけを追加できます。NeoForge の POST を送ったが結果が不明なら、下の停止条件に従います。
-alpha／beta の再開でも `0.3.4-beta.1` を保ち、`.2` へ変更しません。
-
-stable 単 Loader は `RELEASE_VERSION=0.3.4`、`RELEASE_CHANNEL=release`、`RELEASE_LOADERS=fabric` とし、
-同じ prepare → stage → publish を使います。後日 NeoForge を追加するときは新 PATCH `0.3.5` とし、
-その版の changelog／plan を新しく準備します。公開済み `0.3.4` の target 集合へ追加しません。
+一致する既存 version は POST せず、未 POST の不足先だけを追加します。POST 応答が不明で完全一致を証明できない場合は停止します。
 
 ## 状態を確認する
 
-run の summary と別 artifact `publish-state-<run ID>` に、GitHub と target 別の状態が出ます。
+run の summary と別 artifact `publish-state-<run ID>-attempt-<attempt>` に、GitHub と target 別の状態が出ます。
+stage 専用の状態は `stage-state-<run ID>-attempt-<attempt>` です。
 次は読み取り・ローカル保存だけです。出力先は既存 bundle の外の新しいディレクトリにします。
 
 ```sh
 PUBLISH_RUN_ID='確認するpublishのrun番号'
+PUBLISH_RUN_ATTEMPT='確認するrun attempt番号'
 gh run view "$PUBLISH_RUN_ID" --repo aktnb/stream-tweaks --json conclusion,status,url
 gh run download "$PUBLISH_RUN_ID" --repo aktnb/stream-tweaks \
-  --name "publish-state-$PUBLISH_RUN_ID" --dir ./state-snapshot
+  --name "publish-state-$PUBLISH_RUN_ID-attempt-$PUBLISH_RUN_ATTEMPT" --dir ./state-snapshot
 python3 -m json.tool ./state-snapshot/publish-state.json
 gh release view "v${RELEASE_VERSION}+mc${RELEASE_MC}" --repo aktnb/stream-tweaks \
   --json tagName,isDraft,assets,url

@@ -32,7 +32,9 @@ secret は workflow の `publish` step にだけ渡し、plan / build job やロ
 `--curseforge-project <ID>` と、必要な場合のみ `--curseforge-required` を使います。
 再開時も元の project / required をそのまま指定し、公開後に target・公開先・project を追加変更しません。
 
-公開は従来どおり `operation=publish`、または次の CLI です。
+通常の workflow 公開は `operation=release-new` で始め、Environment 承認後に公開します。
+固定 bundle の回復では `operation=publish` も使えますが、こちらも `release-publish` Environment の承認を通ります。
+次の CLI はローカルから adapter を直接呼ぶ運用用です。
 
 ```sh
 python3 scripts/publish_modrinth.py publish --bundle "$BUNDLE_DIR" \

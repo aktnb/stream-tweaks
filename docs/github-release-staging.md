@@ -4,6 +4,10 @@ Issue #11 の adapter は、[prepare-new](release-bundles.md) が生成した同
 この段階では Modrinth を公開せず、GitHub Release も draft のままです。全必須公開先の照合と
 `finalize_release` 呼出しは `publish` coordinator（#12）の責務です。旧 `legacy` 経路は削除済みです。
 
+通常の新規公開では `release-new` が同じ workflow run 内で plan/build と stage を呼び出し、
+`release-publish` Environment 承認後に publish job が draft を復元します。
+以下の `github-stage`／`github-resume` は別 prepare run や既存固定 plan を回復するときの手動経路です。
+
 ## 保管
 
 prepare が成功した run の ID・full source SHA・summary の manifest SHA256 を控えます。
@@ -13,7 +17,7 @@ PR／fork／別 workflow／別 SHA の artifact を拒否します。artifact �
 `release_source_branch` に指定でき、main 移行後も最新台帳で再計画しません。
 
 ```bash
-gh workflow run release.yml --ref 26.2 \
+gh workflow run release.yml --ref main \
   -f operation=github-stage -f channel=beta -f loaders=both \
   -f release_version=0.3.4-beta.1 -f release_minecraft=26.2 -f release_source_branch=26.2 \
   -f source_sha=<prepareの40桁SHA> -f manifest_sha256=<prepareの64桁hash> \
@@ -35,7 +39,7 @@ asset が見えない、`starter` 状態、不一致、重複名、不明な追�
 通常の workflow artifact が期限切れでも、保管ゲートを通過した draft から元 bundle を復元できます。
 
 ```bash
-gh workflow run release.yml --ref 26.2 \
+gh workflow run release.yml --ref main \
   -f operation=github-resume -f channel=beta -f loaders=both \
   -f release_version=0.3.4-beta.1 -f release_minecraft=26.2 -f release_source_branch=26.2 \
   -f source_sha=<元の40桁SHA> -f manifest_sha256=<元の64桁hash>
