@@ -12,7 +12,7 @@ project の作成、secret 登録、実公開はこの実装・mock 検証では
    前者だけでは file ID・hash 照合はできません。API key の発行・利用条件、対象 project の読取範囲を確認してください。
 3. 作者画面で既存・審査待ち・非公開ファイルを確認します。導入前の未追跡 upload がある場合は停止し、
    API で file ID・target・hash を照合できるまで新規投稿しません。以後の投稿は必ず永続 journal を経由します。
-4. 固定 plan に project を指定して prepare した bundle で、次の GET-only preflight を実行します。
+4. 固定 plan に project を指定した `release-new` run の bundle artifact で、次の GET-only preflight を実行します。
    値をコマンド引数に出すのは SHA とパスだけで、token / API key は環境から読みます。
 
 ```sh
@@ -30,10 +30,10 @@ secret は workflow の `publish` step にだけ渡し、plan / build job やロ
 `release.yml` の `curseforge_project` に数値 project ID を指定すると、その plan の各 target に任意先を固定します。
 `curseforge_required=true` の場合だけ成功必須にします。CLI の plan 作成は
 `--curseforge-project <ID>` と、必要な場合のみ `--curseforge-required` を使います。
-再開時も元の project / required をそのまま指定し、公開後に target・公開先・project を追加変更しません。
+同じ run の失敗 job を再実行するときは元の project / required が引き継がれます。公開後に target・公開先・project を追加変更しません。
 
-通常の workflow 公開は `operation=release-new` で始め、Environment 承認後に公開します。
-固定 bundle の回復では `operation=publish` も使えますが、こちらも `release-publish` Environment の承認を通ります。
+workflow の唯一の公開経路は `release-new` です。CurseForge project と required の設定も初回入力で固定し、
+Environment 承認後に公開します。独立した復旧 dispatch はありません。
 次の CLI はローカルから adapter を直接呼ぶ運用用です。
 
 ```sh
@@ -46,10 +46,8 @@ python3 scripts/publish_modrinth.py publish --bundle "$BUNDLE_DIR" \
 optional の secret 不足・審査待ち・API 障害は別 state に残し、GitHub / Modrinth の完了を妨げません。
 required は `verified` のみ成功で、それ以外は draft を維持して非0終了します。
 optional は失敗時も必須先が成功すれば0終了するため、workflow summary の target 別状態も確認してください。
+この場合 Publish job は成功扱いになるため、workflow から optional 先だけを後日再試行する経路はありません。
 
-既に固定されている optional CurseForge は、GitHub 公開後も同一 bundle で不足分を補完できます。
-これは**同一計画内の optional 補完**であり、公開済み集合への target / 公開先追加ではありません。
-新規 attempt を始められるのは、この固定 optional 先に限ります。required 先の公開後新規 attempt は禁止します。
 過去 attempt の結果が不明な場合は optional でも再投稿せず、照会による解決を待ちます。
 
 ## 照合と状態

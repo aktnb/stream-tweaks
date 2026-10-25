@@ -232,7 +232,8 @@ class ModrinthPublishTest(unittest.TestCase):
         self.assertNotIn('legacy', workflow)
         before_publish, publish_job = workflow.split('\n  publish:\n', 1)
         self.assertNotIn('MODRINTH_TOKEN:', before_publish)
-        self.assertIn("if: ${{ inputs.operation == 'release-new' || inputs.operation == 'publish' }}", publish_job)
+        self.assertNotIn('inputs.operation', workflow)
+        self.assertNotIn('      operation:', workflow)
         self.assertIn('name: release-publish', publish_job)
         self.assertEqual(publish_job.count('      - id: publish\n'), 1)
         publish_step = publish_job.split('      - id: publish\n', 1)[1]
@@ -242,38 +243,52 @@ class ModrinthPublishTest(unittest.TestCase):
         self.assertIn('MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}', publish_step)
         self.assertNotIn('rp.build_plan', workflow.split('  github-inputs:\n', 1)[1])
 
-    def test_actual_workflow_identity_scripts_resume_old_plan_after_main_migration(self):
+    def test_actual_workflow_identity_scripts_validate_release_bundle_and_stage_plan(self):
+        # The dispatch path always builds a new plan from the main source checkout.
+        self.fixture.plan = pg.rp.validate_plan(self.fixture.plan | {'source_branch': 'main'})
+        shutil.rmtree(self.bundle)
+        self.fixture.create()
+        self.options['expected_manifest_sha256'] = hashlib.sha256(
+            (self.bundle / pg.rb.MANIFEST).read_bytes()).hexdigest()
         workflow = (pathlib.Path(pm.__file__).parent.parent / '.github/workflows/release.yml').read_text()
         gate = re.search(r'^  github-inputs:\n(.*?)(?=^  [a-zA-Z][\w-]*:|\Z)', workflow, re.M | re.S)[1]
         gate_code = re.search(r"          python3 - <<'PY'\n(.*?)^          PY", gate, re.M | re.S)[1]
         gate_code = '\n'.join(line[10:] for line in gate_code.splitlines())
-        env = dict(os.environ, OPERATION='github-resume', VERSION=self.fixture.plan['mod_version'], MC='26.2',
-                   SOURCE_SHA='a' * 40, MANIFEST_SHA256=self.options['expected_manifest_sha256'], CHANNEL='release',
-                   LOADERS='both', SOURCE_BRANCH='main', ORIGINAL_SOURCE_BRANCH='26.2', BUNDLE_RUN_ID='',
-                   CURSEFORGE_PROJECT='', CURSEFORGE_REQUIRED='false', GITHUB_TOKEN='',
-                   RUN_ID='12345', RUN_ATTEMPT='1',
+        bundle_artifact = 'release-bundle-123-' + 'a' * 40 + '-attempt-1'
+        env = dict(os.environ, VERSION=self.fixture.plan['mod_version'], CHANNEL='release', LOADERS='both',
+                   SOURCE_BRANCH='main', CURSEFORGE_PROJECT='', CURSEFORGE_REQUIRED='false',
+                   PLAN_RESULT='success', BUNDLE_BUILD_RESULT='success', SOURCE_SHA='a' * 40,
+                   MANIFEST_SHA256=self.options['expected_manifest_sha256'],
+                   BUNDLE_BUILD_MANIFEST_SHA256=self.options['expected_manifest_sha256'],
+                   BUNDLE_BUILD_ARTIFACT=bundle_artifact,
+                   RUN_ID='123', RUN_ATTEMPT='1',
+                   REPOSITORY='aktnb/stream-tweaks',
                    RUNNER_TEMP=str(self.fixture.directory), GITHUB_OUTPUT=str(self.fixture.directory / 'outputs'))
+        shutil.copytree(self.bundle, self.fixture.directory / 'release-bundle')
         root = pathlib.Path(pm.__file__).parent.parent
         result = subprocess.run([__import__('sys').executable, '-c', gate_code], env=env, cwd=root,
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        identity = self.fixture.directory / 'github-requested-identity.json'
-        self.assertEqual(json.loads(identity.read_text())['source_branch'], '26.2')
-        expected = self.fixture.directory / 'expected'
-        expected.mkdir()
-        identity.rename(expected / identity.name)
+        outputs = dict(line.split('=', 1) for line in (self.fixture.directory / 'outputs').read_text().splitlines())
+        identity = json.loads(outputs['expected-identity'])
+        self.assertEqual(identity['source_branch'], 'main')
+        self.assertEqual(outputs['bundle-artifact'], bundle_artifact)
         shutil.copytree(self.bundle, self.fixture.directory / 'github-bundle')
-        block = workflow.split('      - name: Verify entire durable bundle', 1)[1].split('      - id: publish', 1)[0]
+        env.update(EXPECTED_IDENTITY=outputs['expected-identity'], TAG=outputs['tag'],
+                   RELEASE_RUN_ID='123', RELEASE_RUN_ATTEMPT='1',
+                   RELEASE_REPOSITORY='aktnb/stream-tweaks')
+        block = workflow.split('      - name: Verify bundle and stage missing assets only', 1)[1]
+        block = block.split('      - name: Summarize publication state', 1)[0]
         code = re.search(r"          python3 - <<'PY'\n(.*?)^          PY", block, re.M | re.S)[1]
         code = '\n'.join(line[10:] for line in code.splitlines())
         result = subprocess.run([__import__('sys').executable, '-c', code], env=env, cwd=root,
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(pg.rp.load_plan(expected / 'github-expected-plan.json'), self.fixture.plan)
-        requested_path = expected / 'github-requested-identity.json'
-        requested = json.loads(requested_path.read_text())
+        expected_plan = self.fixture.directory / 'github-expected-plan.json'
+        self.assertEqual(pg.rp.load_plan(expected_plan), self.fixture.plan)
+        requested = json.loads(env['EXPECTED_IDENTITY'])
         requested['loaders'] = ['fabric']
-        requested_path.write_text(json.dumps(requested))
+        env['EXPECTED_IDENTITY'] = json.dumps(requested)
         result = subprocess.run([__import__('sys').executable, '-c', code], env=env, cwd=root,
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)

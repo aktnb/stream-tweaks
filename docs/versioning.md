@@ -74,8 +74,8 @@ build / check 成功後、固定計画から生成した JAR / notes / manifest 
 `scripts/release_plan.py` は純 SemVer と channel を照合し、台帳の supported 行から選んだ
 MC / Loader、唯一の公開元、full source SHA、Java、ファイル名、公開先契約を固定する。
 alpha / beta は必ず明示番号を渡す。通常版は `--channel release --version 0.3.4` とし、片 Loader でもよい。
-準備台帳の公開元はmain。以下の新規例はmain作成・移行検証後に使い、それまでは新規公開を停止する。
-[移行手順](main-migration.md)でbranchの実在と管理確認 gate を確認する。
+現在の公開元は `main` です。通常の公開では以下の plan CLI を直接起動せず、後述の唯一の workflow 経路
+`release-new` を使います。plan CLI は内部処理やローカル診断向けです。
 
 ```sh
 python3 scripts/release_plan.py new \
@@ -90,9 +90,9 @@ python3 scripts/release_plan.py reuse \
 ```
 
 `--output` は新規ファイルだけを作成し、既存ファイルを上書きしない。指定しなければ stdout のみ。
-保存済み ID の再実行は `reuse` と保存済み plan を使う。SHA、公開元、対象集合、公開先の相違は停止する。
+内部で保存済み plan を再検証する場合は `reuse` を使い、SHA、公開元、対象集合、公開先の相違で停止する。
 reuse は最新台帳を読み直さないので、後から追加された supported 行を取り込まず、元の計画を保持する。
-移行前26.2で作った既存計画の再開だけは、上の例のmainではなく元の `source_branch=26.2` と元SHAを維持する。
+過去に作った plan を診断する場合も、その plan の元 `source_branch` と SHA を維持する。
 この CLI はローカル保存のみで、同 ID の全世界での予約や remote tag の照合は後続 publish adapter の責務。
 計画自体の信頼性は、将来の公開時に信頼できる同一 repository の bundle / manifest と照合する。
 
@@ -101,19 +101,9 @@ reuse は最新台帳を読み直さないので、後から追加された supp
 これらも再開時に同じ値を明示する。計画 CLI 自体は公開せず、実公開は検証済みbundleと
 [任意adapterの導入確認](curseforge-publication.md)を経て行う。
 
-Release workflow の `operation=plan-new` / `plan-reuse` は、`release_version` と `channel` / `loaders`、
-実行元 branch と開始時の SHA を使う read-only の計画検証。reuse は保存済み JSON を
-`existing_plan_json` に渡し、開始時 SHA と一致しない場合は停止する。
-計画は7日保持の workflow artifact になるため、再開が必要なら初回 plan を別途保存する。
-ユーザー入力 JSON とこの artifact は公開承認済み成果物として扱わず、fork PR artifact も公開入力に使わない。
-この操作では従来 build / tag / publish / Discord 通知をすべて skip する。
-旧 `operation=legacy` は廃止済みで、公開・再開には検証済みbundleの経路だけを使う。
-
-`operation=prepare-new` は固定計画から全選択 target を read-only build/check し、
-[不変 bundle と manifest](release-bundles.md) を保存する準備経路です。tag・公開・通知は行いません。
-
-通常公開は `operation=release-new` を `main` ref から1回 dispatch します。同じ run で固定 plan／bundle を作成し、
+Release workflow の唯一の dispatch 経路は `release-new` です。`main` ref から1回実行すると、
+同じ run で固定 plan／bundle を作成し、
 GitHub draft に保管後、`release-publish` Environment の Required reviewers による承認を待ちます。
 承認後に保存済み draft bundle を再検証し、既存 publish coordinator が不足先を照合して finalize します。
 Environment の main-only branch policy と Required reviewers は[公開・復旧ガイド](release-workflow.md)に従って
-事前に設定します。途中で失敗した場合は全 workflow を再ビルドせず、保存済み bundle に対する回復経路を使います。
+事前に設定します。publish job が失敗した場合は同じ run の失敗した job だけを再実行します。
