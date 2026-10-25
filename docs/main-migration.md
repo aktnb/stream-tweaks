@@ -1,9 +1,9 @@
 # main を Active 公開元へ移す手順（Issue #14）
 
 この runbook は main 移行手順と実施記録です。移行全体の最新状態は [main移行の切替後検証記録](main-verification.md) を参照してください。
-2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成しました。2026-10-25にmain宛てdraft PR #21をmergeし、現在のmainはmerge commit `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は作成時のSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持しています。repository default branch は `main` です。
-merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は、main SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` に対する `Build` workflow（`.github/workflows/build.yml`）のpush runです。2026-10-25 04:46:49–04:48:28 UTCに成功し、`CI OK` はsuccess、docs-only変更のため `Build ${{ matrix.target }}` jobはskipでした。別の証拠として、repository Contents APIの2026-10-25 readbackでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` の4ファイルがありました。Ruleset `23603340` は両branchでactive、strictな必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしを確認しました。
-2026-10-25の切替後readbackではmatching tags 0件、GitHub Releases 0件、release assets 0件でした。この切替後検証では公開操作を行っていません。main ref、26.2 ref、default、Ruleset、`.github/workflows` のContents API一覧、配布履歴の最終確認を記録し、移行gateは完了しています。
+2026-10-24に準備 PR #19 を26.2へmergeし、そのmerge SHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から `main` を作成しました。2026-10-25にPR #21をmergeし、そのmerge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。2026-10-25 05:02:25–05:02:27 UTCのreadback snapshotではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main` でした。これは当該時点の記録で、以後のmergeでmain SHAは進みます。
+merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は、run head SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` に対する `Build` workflow（`.github/workflows/build.yml`）のpush runです。2026-10-25 04:46:49–04:48:28 UTCに成功し、`CI OK` はsuccess、docs-only変更のため `Build ${{ matrix.target }}` jobはskipでした。別途、2026-10-25のrepository Contents API readbackでは `.github/workflows` に4ファイルがあることを確認しました。workflowのname/path/state一覧は [切替後検証記録](main-verification.md) のActions API readbackに記載しています。
+2026-10-25 05:02:25–05:02:27 UTCの切替後readback snapshotではmatching tags 0件、GitHub Releases 0件、release assets 0件でした。この時点のmain/26.2 refs、default、Ruleset、workflow一覧、配布履歴の照合を移行gateの完了記録としています。この検証と文書更新では公開操作を行っていません。
 
 [対応方針](support-policy.md)、[対応台帳](support-targets.md)、[CI](ci-build.md) と併用します。
 
@@ -79,8 +79,7 @@ main宛てdraft [PR #21](https://github.com/aktnb/stream-tweaks/pull/21) は2026
 [dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)、
 [保護 API](https://docs.github.com/en/rest/branches/branch-protection)、
 [repository 更新 API](https://docs.github.com/en/enterprise-cloud%40latest/rest/repos/repos#update-a-repository)を参照してください。
-現接続には default / 保護設定の更新ツールがありません。repository ownerによる切替後、repository metadataでdefault=`main`をreadbackしました。Rulesetはreadback可能で、`CI OK` がrequired checksに含まれる実設定を切替後にも確認しました。
-rulesetのreadbackは利用でき、`CI OK` がrequired checksに含まれる実設定はそこで検証します。
+この接続にはdefault／Rulesetの更新権限がありません。repository ownerによる切替後の2026-10-25 05:02 UTC snapshotでdefault=`main`をmetadata readbackしました。Rulesetはread-onlyで取得できます。必須checkを含むRulesetの詳細は、本書上記の切替後readbackを参照してください。
 
 ## 切替前に実施したゲート（2026-10-24）
 
@@ -182,11 +181,11 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 
 | #14 の受入条件 | 保存すべき証拠 | 現時点 |
 | --- | --- | --- |
-| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | main宛てPR #21 はmerge済み。merge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はmain SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` で成功、`CI OK` 成功、docs-onlyのためloader matrix skip。5件の事前dispatch成功とartifact digestはmain-verification.md |
-| 同MCの公開元main一つ | main・26.2両catalogのSHAと検証出力 | authority/sourceはmain。main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main` |
+| main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | main宛てPR #21のmerge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はrun head SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` で成功、`CI OK` success、docs-onlyのためmatrix build skip。5件の事前dispatch成功とartifact digestはmain-verification.md |
+| 同MCの公開元main一つ | main・26.2両catalogの公開元と検証出力 | authority/sourceはmain、両targetのsource_branchはmain。2026-10-25 05:02:25–05:02:27 UTCのref snapshotはmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main`。後続merge後の現在refはAPIで再取得する |
 | 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 2026-10-25の切替後readbackでmain/26.2 refsを照合し、matching tags 0件、GitHub Releases 0件、assets 0件を確認 |
 | CI OK必須と対象保護 | ruleset実設定／owner UI readback | Ruleset 23603340は両branchでactive、strict必須 `CI OK`、deletion/non-fast-forward禁止、bypassなし。classic ruleなしは2026-10-24にowner UI確認 |
-| default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 2026-10-25にdefault=`main`をreadback。失敗時は本書の復旧手順に従う。切替後の復旧操作はなし |
-| 切替後のworkflow・refs・保護・配布履歴readback | repository Contents APIの `.github/workflows` 一覧、branch SHA、ruleset、tags／Releases／assets | `.github/workflows` に4 workflowファイルがあることをContents APIで確認。切替後push run 40163126160は `Build` workflow（`.github/workflows/build.yml`）で成功、matrix buildはskip。main/26.2 SHAとRuleset 23603340を再確認し、tags／Releases／assetsは0件 |
+| default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 2026-10-25 05:02:25–05:02:27 UTC snapshotでdefault=`main`をreadback。失敗時は本書の復旧手順に従う。切替後の復旧操作はなし |
+| 切替後のworkflow・refs・保護・配布履歴readback | Actions API name/path/state、Contents API file listing、ref snapshot、ruleset、配布履歴 | 2026-10-25 05:02 UTCのActions API一覧はmain-verification.mdに記録。Contents APIはworkflowファイルの存在を確認。run 40163126160は切替後のBuild push run。ref/default snapshot、Ruleset、tags／Releases／assetsは同時点で照合済み |
 
 Issue #14 の切替後readback条件は記録済みです。この検証と文書更新では公開操作を行っていません。
