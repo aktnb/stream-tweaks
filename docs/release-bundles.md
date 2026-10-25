@@ -1,18 +1,21 @@
 # 固定リリース bundle の準備と検証
 
-Issue #10 の `prepare-new` は **公開しない**準備経路です。Release workflow の `release_version` に
+Issue #10 の `prepare-new` は **公開しない**準備経路です。通常公開には `release-new` を使い、
+同じ workflow run の中で plan/build → GitHub draft 保管 → Environment 承認後の publish を行います。
+`release-new` も Release workflow の `release_version` に
 `0.3.4-beta.1` のような純 SemVer、`channel` と `loaders` を明示すると、開始時 SHA の固定計画を作り、
 その SHA を checkout して全選択 Loader の build/check と共有テストを実行します。
 stable の片 Loader も計画できます。旧 `operation=legacy` / mc-publish 経路は削除済みです。
-`plan-new` / `plan-reuse` は引き続き計画だけを検証し、`prepare-new` だけが bundle をビルドします。
-これらの準備操作から公開 job・Discord 通知は実行されません。
+`plan-new` / `plan-reuse` は引き続き計画だけを検証し、`prepare-new` は bundle 作成のみです。
+これら2つの操作からは公開 job・Discord 通知を実行しません。
 
 build job の権限は `contents: read`、公開 secret は参照しません。単一 Gradle task graph で共有テストを1回実行し、
 全対象の build/check が成功してから `writeReleaseProvenance` が実際の解決結果を採取します。
 独立 project の並列実行でも記録が先行しないよう build/test task 後の順序を明示しています。
 検証済み通常 JAR、notes、properties、固定 plan、manifest を
-`release-bundle-<run_id>-<source_sha>` artifact に30日保存します。artifact の期限は永続保管の代替ではありません。
-GitHub draft Release への永続保管は `github-stage`、不足先公開と finalize は `publish` の責務です。
+`release-bundle-<run_id>-<source_sha>` artifact に30日保存します。`release-new` は artifact 名に run attempt も含めます。
+artifact の期限は永続保管の代替ではありません。GitHub draft Release への永続保管は `github-stage` job、
+不足先公開と finalize は Environment gate 後の `publish` job の責務です。
 実行順序と復旧は[公開・復旧ガイド](release-workflow.md)を参照してください。
 
 ## 保存形式と契約

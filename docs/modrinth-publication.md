@@ -1,19 +1,19 @@
 # 固定 bundle の不足先公開と再開
 
-2026-10-24 に旧 `mc-publish` 経路を廃止しました。`release.yml` は同じ固定 plan と bundle を
-`prepare-new` → `github-stage` → `publish` の順に扱い、公開時にビルドしません。
+2026-10-24 に旧 `mc-publish` 経路を廃止しました。通常公開は `release-new` を1回 dispatch し、
+同じ固定 plan と bundle を build → GitHub draft 保管 → `release-publish` Environment 承認 → publish の順に扱います。
+公開時に再ビルドしません。詳しい操作・Required reviewers 設定は[公開・復旧ガイド](release-workflow.md)、
 準備は[不変 bundle](release-bundles.md)、永続保管は[GitHub draft 保管](github-release-staging.md)を参照してください。
 
 ## 操作
 
-`prepare-new` の summary で full source SHA、manifest SHA256、成功 run ID を保存します。
-`github-stage` へその3値と、固定した `release_version` / `release_minecraft` / `channel` / `loaders` を渡します。
-`github-stage` は元 run が同じ repository の成功した `workflow_dispatch` であることを API で確認し、
-plan・manifest・provenance と一致する artifact だけを受け付けます。PR / fork の artifact は公開入力に使えません。
+通常の `release-new` では source SHA と manifest SHA256 を同一 run 内で受け渡します。
+`github-stage` job は manifest・provenance・全 asset を照合してから tag と draft を保存します。
+PR / fork artifact は受け付けません。`publish` job は reviewer approval 後に draft から同じ bundle を復元し、
+再検証して Modrinth の不足先だけを作成します。`MODRINTH_TOKEN` 等の配布 secret はこの publish job だけで使います。
 
-draft 全体の再ダウンロード検証が成功した後、同じ値で `operation=publish` を実行します。
-`publish` は GitHub draft から同一バイナリを復元し、Modrinth の不足先だけを作成します。
-`bundle_run_id` は `github-stage` だけに指定し、`github-resume` / `publish` では空にします。
+失敗時に使う手動 `github-stage`／`github-resume`／`publish` は元 source SHA・manifest hash を固定入力として扱います。
+直接起動の `publish` も `release-publish` Environment 承認が必要です。
 artifact が期限切れでも、draft に保存済みなら `github-resume` / `publish` が利用できます。
 draft の bundle も欠けている場合は停止し、無検証の再ビルド・削除・差替えはしません。
 
