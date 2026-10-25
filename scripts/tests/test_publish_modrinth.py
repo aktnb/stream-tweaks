@@ -251,6 +251,7 @@ class ModrinthPublishTest(unittest.TestCase):
                    SOURCE_SHA='a' * 40, MANIFEST_SHA256=self.options['expected_manifest_sha256'], CHANNEL='release',
                    LOADERS='both', SOURCE_BRANCH='main', ORIGINAL_SOURCE_BRANCH='26.2', BUNDLE_RUN_ID='',
                    CURSEFORGE_PROJECT='', CURSEFORGE_REQUIRED='false', GITHUB_TOKEN='',
+                   RUN_ID='12345', RUN_ATTEMPT='1',
                    RUNNER_TEMP=str(self.fixture.directory), GITHUB_OUTPUT=str(self.fixture.directory / 'outputs'))
         root = pathlib.Path(pm.__file__).parent.parent
         result = subprocess.run([__import__('sys').executable, '-c', gate_code], env=env, cwd=root,
