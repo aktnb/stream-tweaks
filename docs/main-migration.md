@@ -146,11 +146,8 @@ MC / Java / Loader properties は元の台帳行と照合し、checkout は固�
 6. 成功した run の full source SHA／MC／Loader／実 JDK／結果を保存する。
    全対象の resolver が main を一度だけ解決し、同じ固定 SHA を両 Loader に使うこと、
    台帳がmain以外の同MC公開元を示さないことを確認する。
-7. main と26.2の保護設定を読戻し、main の `CI OK` が必須である実設定を確認する。
-   GitHub Actions由来の正しい check context を選び、他のレビュー・更新制約も保存する。
-   その後にだけ default をmainへ変更し、default／workflow discovery／保護を再読込する。
-8. 26.2・Tag・Release・asset の保存済み一覧を再照合し、削除・rename・差替えがないことを記録する。
-   成功記録が揃ったら新規公開停止を解除する。残した26.2は休止中の履歴であり二重公開元ではない。
+7. 切替前にmainと26.2の保護設定をreadbackし、mainの `CI OK` 必須、GitHub Actions由来のcheck context、レビュー・更新制約を確認しました。2026-10-25にdefaultをmainへ切替え、その後default／workflow discovery／保護を再取得しました。
+8. 2026-10-25に26.2・Tag・Release・assetの一覧を再照合し、削除・rename・差替えがないことを確認しました。matching tags、GitHub Releases、release assetsは0件です。切替後readbackを移行gateの完了記録に含めました。この検証では公開操作を行っていません。残した26.2は休止中の履歴であり二重公開元ではありません。
 
 ## 失敗時の公開停止と復旧
 
