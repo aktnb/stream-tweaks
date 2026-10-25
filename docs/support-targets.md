@@ -2,14 +2,14 @@
 
 `support-targets.json` を CI・公開計画の対象選択の入口にする。現行の2 target は
 `26.2-fabric` / `26.2-neoforge`。ModMenu は Fabric 限定で、NeoForge でも設定画面自体は利用できる。
-台帳の権威元と両行の公開元は `main` です。`main` は2026-10-24に確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成済みで、`main` と `26.2` は同じSHAを指します。repository default はまだ `26.2` です。
-default切替後の最終readbackが終わるまで移行完了とは扱わず、新規公開停止を維持します。[移行 gate](main-migration.md)を確認してください。
+台帳の権威元と両行の公開元は `main` です。mainは2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21がmergeされました。現在のmain SHAは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持し、repository defaultは `main` です。
+2026-10-25の切替後readbackでmain/26.2 refs、default、Ruleset、mainのworkflow一覧を照合しました。matching tags、GitHub Releases、release assetsはいずれも0件で、この検証では公開していません。移行の実施記録は [main-migration.md](main-migration.md) を参照してください。
 方針は [support-policy.md](support-policy.md)、版番号は [versioning.md](versioning.md) を参照。
 
 ## スキーマと権威元
 
 schema version は1。トップレベルは `schema_version` / `authority_branch` / `targets`。
-現在の台帳は `authority_branch=main` です。`main` は `26.2` の確認済みSHA `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成済みで、両 branch は同じSHAを指します。repository default は `26.2` のままです。台帳の文字列だけでdefault切替や移行完了を宣言しません。
+現在の台帳は `authority_branch=main` です。各targetの `source_branch` も `main` です。切替後readbackではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、repository default=`main` を確認しました。台帳の文字列だけではdefault切替や移行完了を宣言せず、repository metadataとrefのreadbackを別途確認します。
 これは全体台帳の権威元であり、各 target の `source_branch` とは用途が異なる。
 各 source checkout の `gradle.properties` が実際のビルド値の真実で、台帳を使って上書きしない。
 
