@@ -21,7 +21,7 @@
 
 同時点のrepository Contents APIでは `.github/workflows` directoryに上記4ファイルが存在しました。これはファイルの存在確認で、Actions APIのname/path/state一覧とは別のreadbackです。
 
-切替後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は `Build` workflow（`.github/workflows/build.yml`）の別個の実行記録です。`CI OK` success、docs-only変更のためmatrix build jobはskipでした。
+PR #21 merge後のpush run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は `Build` workflow（`.github/workflows/build.yml`）の別個の実行記録です。`CI OK` success、docs-only変更のためmatrix build jobはskipでした。
 
 ## main 初回 push の CI
 
@@ -60,6 +60,6 @@ Release run logs confirm `plan-new`／`prepare-new` used source branch `main`, v
 
 PR #21はmerge済みで、merge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` です。merge後push [run 40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は2026-10-25 04:46:49–04:48:28 UTCに成功しました。Plan、format、shared tests、script tests、`CI OK` は成功し、docs-only差分のためloader build matrixはskipでした。
 
-2026-10-25 05:02:25–05:02:27 UTC snapshotのrepository metadata/refではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87` を確認しました。後続のmerge/push後はlive refを再取得してください。Ruleset 23603340も同時点でactive、strict必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしでした。workflow API一覧のname/path/stateは上記表、Contents APIは4ファイルの存在を別途確認しました。切替後push run 40163126160はBuild workflowのsuccess runで、`CI OK` success、matrix build skipです。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
+2026-10-25 05:02:25–05:02:27 UTC snapshotのrepository metadata/refではdefault=`main`、main=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87` を確認しました。後続のmerge/push後はlive refを再取得してください。Ruleset 23603340も同時点でactive、strict必須 `CI OK`、deletion/non-fast-forward禁止、bypassなしでした。workflow API一覧のname/path/stateは上記表、Contents APIは4ファイルの存在を別途確認しました。PR #21 merge後のpush run 40163126160はBuild workflowのsuccess runで、`CI OK` success、matrix build skipです。matching tags、GitHub Releases、release assetsはそれぞれ0件です。
 
 切替前の5件のmain向けdispatchはすべて成功しています。これによりIssue #14の切替後readback条件を満たしています。この検証と文書更新では公開操作を行っていません。
