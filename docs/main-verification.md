@@ -1,4 +1,4 @@
-# main 移行検証の途中経過（Issue #14）
+# main 移行の切替後検証記録（Issue #14）
 
 この文書はmain切替後の検証記録です。2026-10-25にPR #21がmergeされ、default branchは `main` へ切替済みです。切替後のref・workflow・ruleset・配布履歴のreadbackを完了しました。merge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) は成功し、`CI OK` も成功しました。docs-only変更のためloader build matrixはskipでした。
 mainのmerge commitは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持しています。切替後readbackでmatching tags、GitHub Releases、release assetsはいずれも0件で、公開操作は行っていません。
