@@ -143,11 +143,9 @@
 - リリースは `.github/workflows/release.yml` の手動実行（`workflow_dispatch`）で行います。
   - `release_version` に alpha/beta の番号を含む純 SemVer を明示し、`channel` と `loaders` を固定します。
     supported であれば stable 単 Loader も許可します。公開後の Loader 追加は新 PATCH とします。
-  - `plan-new` / `plan-reuse` は公開なしの計画検証、`prepare-new` は read-only build/check と不変 bundle 生成です。
-  - 成功 prepare の run ID / full source SHA / manifest SHA256 で `github-stage` を実行し、
-    annotated tag と draft に同じ bundle を保管・再照合します。既存一致は再利用し、相違は停止します。
-  - `github-resume` は保存済み bundle の復元・照合、`publish` は不足先を照合・補完して全必須先成功後に finalize します。
-    再開は保存 plan を使い、移行後も `release_source_branch` と SHA / target 集合を変えません。
+  - 唯一の dispatch 経路は `release-new` です。計画、build/check、bundle 検証、GitHub draft 保管、
+    `release-publish` Environment の承認後の公開までを同じ run で行います。
+  - `Publish <tag>` の失敗時は同じ run の失敗した job だけを再実行します。個別の stage／resume／publish dispatch はありません。
   - attempt / verified receipt と外部 ID は別 publish-state に記録します。応答喪失時に成功を証明できなければ停止し、
     tag / Release / version の削除・上書きや無検証の再ビルドで復旧しません。旧 mc-publish 経路は使用しません。
   - changelog は `scripts/changelog_tool.py --loaders` を再利用します。Discord は finalize 成功後だけ通知し、

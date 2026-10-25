@@ -1,29 +1,17 @@
-# 検証済み bundle の GitHub draft 保管と復元
+# 検証済み bundle の GitHub draft 保管
 
-Issue #11 の adapter は、[prepare-new](release-bundles.md) が生成した同じバイナリを保管・復元します。
+Issue #11 の adapter は、`release-new` run が生成した同じバイナリを保管・復元します。
 この段階では Modrinth を公開せず、GitHub Release も draft のままです。全必須公開先の照合と
 `finalize_release` 呼出しは `publish` coordinator（#12）の責務です。旧 `legacy` 経路は削除済みです。
 
-通常の新規公開では `release-new` が同じ workflow run 内で plan/build と stage を呼び出し、
-`release-publish` Environment 承認後に publish job が draft を復元します。
-以下の `github-stage`／`github-resume` は別 prepare run や既存固定 plan を回復するときの手動経路です。
+`release-new` が唯一の workflow dispatch 経路です。内部の `github-stage` job が検証済み bundle を draft に保存し、
+`release-publish` Environment 承認後に `publish` job が draft から復元します。
+独立した stage／resume の workflow dispatch はありません。
 
 ## 保管
 
-prepare が成功した run の ID・full source SHA・summary の manifest SHA256 を控えます。
-`github-stage` は同 repository の成功した `workflow_dispatch` / `release.yml` run を API で確認し、
-PR／fork／別 workflow／別 SHA の artifact を拒否します。artifact を取得できなければ停止し、再ビルドしません。
-新規 prepare は現在の台帳の公開元で実行します。保存 plan の保管・再開は元 source branch を
-`release_source_branch` に指定でき、main 移行後も最新台帳で再計画しません。
-
-```bash
-gh workflow run release.yml --ref main \
-  -f operation=github-stage -f channel=beta -f loaders=both \
-  -f release_version=0.3.4-beta.1 -f release_minecraft=26.2 -f release_source_branch=26.2 \
-  -f source_sha=<prepareの40桁SHA> -f manifest_sha256=<prepareの64桁hash> \
-  -f bundle_run_id=<成功したprepareのrun番号>
-```
-
+`github-stage` は同じ `release-new` run の bundle artifact を検証して保管します。
+PR／fork／別 workflow／別 SHA の artifact を使いません。artifact を取得できなければ停止し、再ビルドしません。
 write job は検証済み canonical tag 単位で排他し、途中の新 run で cancel しません。
 固定計画・source・manifest・JAR・notes・properties を照合してから annotated tag を作ります。
 既存 annotated tag は peeled commit SHA が同じ場合だけ再利用し、lightweight tag／異なる SHA は停止します。
@@ -34,24 +22,16 @@ POST 応答喪失後は再 GET し、同じ内容を確認できた場合のみ�
 asset が見えない、`starter` 状態、不一致、重複名、不明な追加 asset がある場合は止まります。
 その場で POST を再試行したり、不明状態を成功と扱ったりしません。
 
-## draft からの復元
+## Publish job の再実行
 
-通常の workflow artifact が期限切れでも、保管ゲートを通過した draft から元 bundle を復元できます。
-
-```bash
-gh workflow run release.yml --ref main \
-  -f operation=github-resume -f channel=beta -f loaders=both \
-  -f release_version=0.3.4-beta.1 -f release_minecraft=26.2 -f release_source_branch=26.2 \
-  -f source_sha=<元の40桁SHA> -f manifest_sha256=<元の64桁hash>
-```
-
-元 tag の SHA と明示した manifest hash、全 bundle の集合・hash・metadata が一致しなければ停止します。
-draft が部分保存のまま artifact も失われた場合、無検証再ビルドや tag／Release 削除で修復しません。
-元の bundle を回収し、元 manifest と同一 hash を証明できる場合だけ `github-stage` で不足を補完します。
-同じ source から生成しただけの別 manifest（run provenance が違うものを含む）は代用できません。
+一時エラーで `Publish <tag>` が失敗した場合は、その job だけを同じ run で再実行します。
+job は draft から元 bundle を復元し、source SHA、manifest hash、全 bundle の hash・metadata を再検証します。
+独立した `github-resume` dispatch はありません。draft が不完全、または同じ run を再実行できない場合は停止し、
+無検証の再ビルドや tag／Release の削除・差替えをしません。
 
 ## CLI と連携 API
 
+以下は adapter の開発・診断用 CLI です。通常の workflow 公開手順では使いません。
 ローカル CLI では `GITHUB_TOKEN` を環境から読みます。値を引数・ログへ表示しないでください。
 保管には repository Contents write、run 照合・artifact 取得には Actions read が必要です。
 token 未設定・権限不足・不明な remote 状態では停止します。secret 値を確認する必要はありません。

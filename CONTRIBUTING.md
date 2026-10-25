@@ -77,17 +77,16 @@ python3 scripts/changelog_tool.py alpha --loaders fabric
 python3 scripts/changelog_tool.py alpha --loaders neoforge
 ```
 
-## リリース準備と部分失敗の復旧
+## リリースと部分失敗の復旧
 
-[公開・復旧ガイド](docs/release-workflow.md)を使い、純 SemVer・channel・MC・Loader 集合を明示して固定します。
-alpha/beta は番号まで明示し、同 ID の再開で番号を変えません。stable の単 Loader も選べます。
-`prepare-new`（公開なし build/check）→ `github-stage`（draft 永続保管）→ `publish` の順で実行し、
-成功 prepare の full SHA / run ID / manifest SHA256 と plan を保存してください。
+[公開ガイド](docs/release-workflow.md)に従い、`release-new` を `main` から1回実行します。
+純 SemVer・channel・Loader 集合を指定し、alpha/beta は番号まで明示します。stable の単 Loader も選べます。
+計画、build/check、bundle 保管、承認後の公開は同じ workflow run が行います。
 
-部分成功からは同じ入力・同じ bundle で `publish` を再実行します。相違・応答喪失の不明状態・artifact 消失時は
-停止し、元 manifest と hash の一致を証明してから回復します。Tag / Release / version を削除・差し替えません。
+`Publish <tag>` が一時エラーで失敗した場合は、同じ run の失敗した job だけを再実行します。
+それ以外の個別再開 dispatch はありません。不明状態では停止し、Tag / Release / version を削除・差し替えません。
 公開先間の原子的成功は保証しません。後日の Loader 追加は新 PATCH とし、既存 target 集合を拡張しません。
-必要な権限・secret 名と未設定時の挙動、状態確認 CLI、公開なし mock 確認は上記ガイドを参照してください。
+必要な権限・secret 名と未設定時の挙動、状態確認手順は上記ガイドを参照してください。
 
 ## Local checks
 

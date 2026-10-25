@@ -31,6 +31,8 @@ GitHub Actions の 2026-10-24 13:58 UTC readbackは初回push後の履歴です�
 
 ## main 向け dispatch 状況
 
+以下の `plan-new`／`prepare-new` は2026-10-25時点で実行した履歴です。現在の Release workflow には計画・準備専用 dispatch はなく、公開経路は `release-new` のみです。
+
 すべて GitHub Actions UI の `Use workflow from: main` で実行し、source SHA は `da51f9d7e4217e8734ee17fcc2780164595f6e87` でした。Build／Validate all は全必須jobが成功し、実JDKは Temurin 25.0.4 です。
 
 | Workflow / operation | 入力 | 結果 |

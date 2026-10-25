@@ -192,15 +192,13 @@ authOrchestrator.startAuthentication(uri -> {
 [docs/versioning.md](docs/versioning.md) を参照する。手順切替版は2026-10-24で、remote への導入後に使用する。
 
 - 純 SemVer と channel、MC、Loader 集合を明示する。alpha/beta は番号まで固定し、自動採番しない。
-- `prepare-new` は read-only build/check 後に固定 plan / 通常 JAR / notes / manifest を生成する。公開はしない。
-- 成功 prepare の run ID / full source SHA / manifest SHA256 を保存し、`github-stage` で同 bundle を draft に保管する。
-- `publish` は draft から復元して各公開先を再照合し、不足分だけ補完する。全必須先成功後に draft を解除・通知する。
-- 部分成功の再開でも source / version / target / 公開先を変えず、保存 plan を使う。
-  main 移行後も `release_source_branch` は元の値を指定する。
+- `release-new` が唯一の workflow dispatch 経路。plan / build / bundle 検証 / GitHub draft 保管後、承認を経て公開する。
+- `github-stage` と `publish` は workflow 内部 job。独立した stage / resume / publish dispatch はない。
+- `Publish <tag>` の一時失敗は、同じ run の失敗した job だけを再実行する。source / version / target / 公開先は変えない。
 - stable の単 Loader を許可する。公開後に別 Loader を追加する場合は新 PATCH とし、既存集合を拡張しない。
 - 応答喪失は再照会し、成功を証明できなければ停止する。Tag / Release / Modrinth version の削除・overwrite による復旧は禁止。
-- artifact 消失時は無検証で再ビルドせず、元 manifest と同じ hash の bundle を回復できる場合だけ再開する。
+- draft 保管後の publish job は draft から bundle を復元・再検証する。無検証で再ビルド・差し替えしない。
 - changelog の `[fabric]` / `[neoforge]` / `[fabric,neoforge]` filter を再利用し、タグなし項目は共通とする。
 - secret は環境からのみ読み、値をログや引数へ出さない。GitHub / Modrinth の原子的公開は保証しない。
 
-公開なしの CLI / mock 確認、権限・未設定時の挙動、具体的な prepare / stage / resume / publish / 状態確認は上記ガイドを使う。
+権限・未設定時の挙動、部分失敗時の job 再実行と状態確認は上記ガイドを使う。

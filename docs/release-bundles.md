@@ -1,22 +1,20 @@
-# 固定リリース bundle の準備と検証
+# 固定リリース bundle の生成と検証
 
-Issue #10 の `prepare-new` は **公開しない**準備経路です。通常公開には `release-new` を使い、
-同じ workflow run の中で plan/build → GitHub draft 保管 → Environment 承認後の publish を行います。
-`release-new` も Release workflow の `release_version` に
+Release workflow の唯一の dispatch 経路 `release-new` が、同じ run 内で plan/build → GitHub draft 保管 →
+Environment 承認後の publish を行います。公開なしの prepare dispatch はありません。
+Release workflow の `release_version` に
 `0.3.4-beta.1` のような純 SemVer、`channel` と `loaders` を明示すると、開始時 SHA の固定計画を作り、
 その SHA を checkout して全選択 Loader の build/check と共有テストを実行します。
 stable の片 Loader も計画できます。旧 `operation=legacy` / mc-publish 経路は削除済みです。
-`plan-new` / `plan-reuse` は引き続き計画だけを検証し、`prepare-new` は bundle 作成のみです。
-これら2つの操作からは公開 job・Discord 通知を実行しません。
 
 build job の権限は `contents: read`、公開 secret は参照しません。単一 Gradle task graph で共有テストを1回実行し、
 全対象の build/check が成功してから `writeReleaseProvenance` が実際の解決結果を採取します。
 独立 project の並列実行でも記録が先行しないよう build/test task 後の順序を明示しています。
 検証済み通常 JAR、notes、properties、固定 plan、manifest を
-`release-bundle-<run_id>-<source_sha>` artifact に30日保存します。`release-new` は artifact 名に run attempt も含めます。
-artifact の期限は永続保管の代替ではありません。GitHub draft Release への永続保管は `github-stage` job、
+`release-bundle-<run_id>-<source_sha>-attempt-<attempt>` artifact に30日保存します。
+artifact の期限は永続保管の代替ではありません。GitHub draft Release への永続保管は同じ run の `github-stage` job、
 不足先公開と finalize は Environment gate 後の `publish` job の責務です。
-実行順序と復旧は[公開・復旧ガイド](release-workflow.md)を参照してください。
+失敗時の扱いは[公開ガイド](release-workflow.md)を参照してください。
 
 ## 保存形式と契約
 
@@ -36,7 +34,7 @@ manifest schema 1 は次の情報を固定します。
 
 notes は `changelog_tool.py` の parser と Loader filter を再利用します。stable は一致する版セクション、
 alpha/beta は同じ source SHA の Unreleased を使います。CHANGELOG の更新やプレ番号の採番は行いません。
-この準備経路は Unreleased 全文を固定し、従来経路の前回 tag 以降の差分採取とは区別します。
+`release-new` の bundle build は Unreleased 全文を固定し、従来経路の前回 tag 以降の差分採取とは区別します。
 
 `scripts/release_bundle.py` の `create_bundle()` / `verify_bundle()` は後続 adapter から利用できます。
 `verify_bundle()` は信頼できる checkout／tag／保存 plan から得た `expected_source_sha` を必須にし、

@@ -4,23 +4,6 @@ run-name: Release ${{ inputs.channel || 'manual' }} for ${{ github.ref_name }}
 on:
   workflow_dispatch:
     inputs:
-      operation:
-        description: '通常公開はrelease-newを1回起動。承認後に公開。不足先の再開にも各operationを使用'
-        type: choice
-        required: true
-        default: prepare-new
-        options:
-          - plan-new
-          - plan-reuse
-          - prepare-new
-          - release-new
-          - github-stage
-          - github-resume
-          - publish
-      release_source_branch:
-        description: '再開する固定計画の元source branch（空欄は実行ref、main移行後も元の値を使う）'
-        type: string
-        required: false
       curseforge_project:
         description: '任意公開先の固定project ID（未設定ならGitHub/Modrinthのみ）'
         type: string
@@ -29,30 +12,10 @@ on:
         description: '計画でCurseForge成功を必須にする（未指定なら任意先）'
         type: boolean
         default: false
-      release_minecraft:
-        description: 'github-*: 固定計画のMinecraft版。release-newでは任意の照合値'
-        type: string
-        required: false
-      source_sha:
-        description: 'github-*: prepare成功runのfull source SHA'
-        type: string
-        required: false
-      manifest_sha256:
-        description: 'github-*: prepare summaryに表示されたmanifest SHA256'
-        type: string
-        required: false
-      bundle_run_id:
-        description: 'github-stage: 成功したprepare-new run ID（PR artifact不可）'
-        type: string
-        required: false
       release_version:
-        description: '計画用の純SemVer（例: 0.3.4-beta.1、プレ番号は固定）'
+        description: 'リリース用の純SemVer（例: 0.3.4-beta.1、プレ番号は固定）'
         type: string
-        required: false
-      existing_plan_json:
-        description: 'plan-reuse専用: 保存済みplan JSON。現段階では公開入力に使用しない'
-        type: string
-        required: false
+        required: true
       channel:
         description: 'リリースチャンネル'
         type: choice
@@ -72,9 +35,8 @@ on:
           - neoforge
 
 concurrency:
-  # New publication paths use explicit SemVer × MC, independent of main/maintenance ref names.
-  # The write job additionally locks the canonical validated tag across branch migrations.
-  group: release-${{ inputs.release_version || github.ref_name }}+mc${{ inputs.release_minecraft || github.ref_name }}
+  # Serialize the selected version on the publication branch; the write jobs also lock the validated tag.
+  group: release-${{ inputs.release_version }}-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -82,74 +44,63 @@ permissions:
 
 jobs:
   plan:
-    name: Compute fixed plan (no publication)
-    if: ${{ inputs.operation == 'plan-new' || inputs.operation == 'plan-reuse' || inputs.operation == 'prepare-new' || inputs.operation == 'release-new' }}
+    name: Compute fixed release plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       source-sha: ${{ steps.fixed-plan.outputs.source-sha }}
+      plan-artifact: ${{ steps.fixed-plan.outputs.plan-artifact }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - id: fixed-plan
-        name: Compute or verify explicit plan
+        name: Compute fixed plan
         shell: bash
         env:
-          OPERATION: ${{ inputs.operation }}
           VERSION: ${{ inputs.release_version }}
           CHANNEL: ${{ inputs.channel }}
           LOADERS: ${{ inputs.loaders }}
           SOURCE_BRANCH: ${{ github.ref_name }}
           SOURCE_SHA: ${{ github.sha }}
-          EXISTING_PLAN_JSON: ${{ inputs.existing_plan_json }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
           CURSEFORGE_PROJECT: ${{ inputs.curseforge_project }}
           CURSEFORGE_REQUIRED: ${{ inputs.curseforge_required }}
         run: |
           set -euo pipefail
-          case "$OPERATION" in
-            plan-new|prepare-new|release-new) MODE=new ;;
-            plan-reuse) MODE=reuse ;;
-            *) exit 1 ;;
-          esac
           case "$LOADERS" in
             both) LOADER_ARGS=(--loader fabric --loader neoforge) ;;
             fabric|neoforge) LOADER_ARGS=(--loader "$LOADERS") ;;
             *) exit 1 ;;
           esac
           MC_VERSION="$(sed -nE 's/^minecraft_version=([^[:space:]#]+).*$/\1/p' gradle.properties)"
-          if [[ "$OPERATION" == release-new && "$SOURCE_BRANCH" != main ]]; then
+          if [[ "$SOURCE_BRANCH" != main ]]; then
             echo 'release-new は main ref からのみ実行できます' >&2
             exit 1
           fi
-          PLAN_ARGS=("$MODE" --version "$VERSION" --minecraft "$MC_VERSION" --channel "$CHANNEL"
+          PLAN_ARGS=(new --version "$VERSION" --minecraft "$MC_VERSION" --channel "$CHANNEL"
             --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA"
             --properties gradle.properties "${LOADER_ARGS[@]}" --output "$RUNNER_TEMP/release-plan.json")
           if [[ -n "$CURSEFORGE_PROJECT" ]]; then PLAN_ARGS+=(--curseforge-project "$CURSEFORGE_PROJECT"); fi
           if [[ "$CURSEFORGE_REQUIRED" == true ]]; then PLAN_ARGS+=(--curseforge-required); fi
-          if [[ "$MODE" == reuse ]]; then
-            python3 -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "existing-plan.json").write_text(os.environ["EXISTING_PLAN_JSON"], encoding="utf-8")'
-            PLAN_ARGS+=(--existing "$RUNNER_TEMP/existing-plan.json")
-          elif [[ -n "$EXISTING_PLAN_JSON" ]]; then
-            echo "新規計画では existing_plan_json を指定できません"
-            exit 1
-          fi
           python3 scripts/release_plan.py "${PLAN_ARGS[@]}"
           printf 'source-sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
-          echo '固定計画を検証しました。このjobではtag/publication/通知を実行していません。' >> "$GITHUB_STEP_SUMMARY"
+          printf 'plan-artifact=release-plan-%s-%s-attempt-%s\n' \
+            "$RELEASE_RUN_ID" "$SOURCE_SHA" "$RELEASE_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          echo '固定計画を作成しました。' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save fixed plan
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: release-plan-${{ github.run_id }}-${{ github.sha }}
+          name: ${{ steps.fixed-plan.outputs.plan-artifact }}
           path: ${{ runner.temp }}/release-plan.json
           retention-days: 7
 
   bundle-build:
-    name: Build immutable release bundle (no publication)
-    if: ${{ inputs.operation == 'prepare-new' || inputs.operation == 'release-new' }}
+    name: Build immutable release bundle
     needs: [plan]
     runs-on: ubuntu-latest
     permissions:
@@ -166,7 +117,7 @@ jobs:
       - name: Download this run's fixed plan
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: release-plan-${{ github.run_id }}-${{ github.sha }}
+          name: ${{ needs.plan.outputs.plan-artifact }}
           path: ${{ runner.temp }}/fixed-plan
 
       - uses: ./.github/actions/setup-build
@@ -215,7 +166,6 @@ jobs:
         name: Validate JARs and save immutable bundle
         shell: bash
         env:
-          OPERATION: ${{ inputs.operation }}
           EXPECTED_SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
           RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -236,13 +186,12 @@ jobs:
           manifest = pathlib.Path(os.environ['RUNNER_TEMP']) / 'release-bundle/release-manifest.json'
           digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
           artifact = 'release-bundle-' + os.environ['RELEASE_RUN_ID'] + '-' + os.environ['EXPECTED_SOURCE_SHA']
-          if os.environ['OPERATION'] == 'release-new':
-              artifact += '-attempt-' + os.environ['RELEASE_RUN_ATTEMPT']
+          artifact += '-attempt-' + os.environ['RELEASE_RUN_ATTEMPT']
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
               stream.write('manifest-sha256=' + digest + '\n')
               stream.write('bundle-artifact=' + artifact + '\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as stream:
-              stream.write('Bundle verified; no tag/publication/notification. Manifest SHA256: `' + digest + '`\n')
+              stream.write('Bundle verified and ready for GitHub draft staging. Manifest SHA256: `' + digest + '`\n')
           PY
 
       - name: Save validated bundle
@@ -256,17 +205,14 @@ jobs:
   github-inputs:
     name: Verify GitHub staging identity (read only)
     needs: [plan, bundle-build]
-    if: ${{ always() && (inputs.operation == 'release-new' || inputs.operation == 'github-stage' || inputs.operation == 'github-resume' || inputs.operation == 'publish') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
     outputs:
       tag: ${{ steps.identity.outputs.tag }}
       source-sha: ${{ steps.identity.outputs.source-sha }}
       manifest-sha256: ${{ steps.identity.outputs.manifest-sha256 }}
       expected-identity: ${{ steps.identity.outputs.expected-identity }}
-      expected-identity-artifact: ${{ steps.identity.outputs.expected-identity-artifact }}
       bundle-artifact: ${{ steps.identity.outputs.bundle-artifact }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -274,7 +220,6 @@ jobs:
           persist-credentials: false
 
       - name: Download this run's release bundle
-        if: ${{ inputs.operation == 'release-new' }}
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: ${{ needs.bundle-build.outputs.bundle-artifact }}
@@ -284,120 +229,74 @@ jobs:
         name: Validate immutable publication inputs
         shell: bash
         env:
-          OPERATION: ${{ inputs.operation }}
           VERSION: ${{ inputs.release_version }}
-          MC: ${{ inputs.release_minecraft }}
-          SOURCE_SHA: ${{ inputs.source_sha || needs.plan.outputs.source-sha }}
-          MANIFEST_SHA256: ${{ inputs.manifest_sha256 || needs.bundle-build.outputs.manifest-sha256 }}
           CHANNEL: ${{ inputs.channel }}
           LOADERS: ${{ inputs.loaders }}
           SOURCE_BRANCH: ${{ github.ref_name }}
-          BUNDLE_RUN_ID: ${{ inputs.bundle_run_id }}
-          ORIGINAL_SOURCE_BRANCH: ${{ inputs.release_source_branch }}
           CURSEFORGE_PROJECT: ${{ inputs.curseforge_project }}
           CURSEFORGE_REQUIRED: ${{ inputs.curseforge_required }}
           PLAN_RESULT: ${{ needs.plan.result }}
-          PLAN_SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
           BUNDLE_BUILD_RESULT: ${{ needs.bundle-build.result }}
           BUNDLE_BUILD_MANIFEST_SHA256: ${{ needs.bundle-build.outputs.manifest-sha256 }}
           BUNDLE_BUILD_ARTIFACT: ${{ needs.bundle-build.outputs.bundle-artifact }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source-sha }}
+          MANIFEST_SHA256: ${{ needs.bundle-build.outputs.manifest-sha256 }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import hashlib, json, os, pathlib, re, sys
           sys.path.insert(0, 'scripts')
-          import publish_github as gh, release_bundle as rb, release_plan as rp, validate_targets as vt
+          import release_bundle as rb, release_plan as rp, validate_targets as vt
           env = os.environ
-          operation = env['OPERATION']
-          if operation == 'release-new':
-              if env['PLAN_RESULT'] != 'success' or env['BUNDLE_BUILD_RESULT'] != 'success':
-                  raise SystemExit('release-new requires a successful fixed plan and bundle build')
-              if env['BUNDLE_RUN_ID']:
-                  raise SystemExit('release-new creates its own bundle; bundle_run_id is recovery-only')
-              if env['SOURCE_BRANCH'] != 'main' or env['ORIGINAL_SOURCE_BRANCH'] not in ('', 'main'):
-                  raise SystemExit('release-new must use the main publication source')
-              if env['SOURCE_SHA'] != env['PLAN_SOURCE_SHA']:
-                  raise SystemExit('release-new plan source SHA mismatch')
-              if env['MANIFEST_SHA256'] != env['BUNDLE_BUILD_MANIFEST_SHA256']:
-                  raise SystemExit('release-new bundle manifest output mismatch')
-              if not re.fullmatch('[0-9a-f]{64}', env['MANIFEST_SHA256']):
-                  raise SystemExit('release-new manifest SHA256 is missing or invalid')
-              bundle_dir = pathlib.Path(env['RUNNER_TEMP']) / 'release-bundle'
-              manifest_path = bundle_dir / rb.MANIFEST
-              digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-              if digest != env['MANIFEST_SHA256']:
-                  raise SystemExit('release-new downloaded manifest hash mismatch')
-              manifest = json.loads(manifest_path.read_text(encoding='utf-8'), object_pairs_hook=vt._unique_object)
-              plan = rp.validate_plan(manifest['plan'])
-              workflow = manifest['provenance']['workflow']
-              if (workflow['repository'] != env['REPOSITORY'] or workflow['run_id'] != env['RUN_ID']
-                      or int(workflow['run_attempt']) > int(env['RUN_ATTEMPT'])):
-                  raise SystemExit('release-new bundle provenance does not match this workflow run')
-              if plan['source_sha'] != env['SOURCE_SHA'] or plan['source_branch'] != env['SOURCE_BRANCH']:
-                  raise SystemExit('release-new bundle source identity mismatch')
-              if env['MC'] and env['MC'] != plan['minecraft']:
-                  raise SystemExit('release-new Minecraft input does not match gradle.properties')
-              loaders = ['fabric', 'neoforge'] if env['LOADERS'] == 'both' else [env['LOADERS']]
-              identity = dict(version=env['VERSION'], minecraft=plan['minecraft'], channel=env['CHANNEL'],
-                  source_branch=env['SOURCE_BRANCH'], source_sha=env['SOURCE_SHA'],
-                  loaders=rp.normalize_loaders(loaders), curseforge_project=env['CURSEFORGE_PROJECT'] or None,
-                  curseforge_required=env['CURSEFORGE_REQUIRED'] == 'true')
-              expected_plan = rp.reuse_plan(plan, **identity)
-              rb.verify_bundle(bundle_dir, expected_source_sha=env['SOURCE_SHA'], expected_plan=expected_plan,
-                  expected_manifest_sha256=env['MANIFEST_SHA256'])
-              tag = expected_plan['tag']
-              bundle_artifact = env['BUNDLE_BUILD_ARTIFACT']
-          else:
-              if re.fullmatch('[0-9a-f]{64}', env['MANIFEST_SHA256']) is None:
-                  raise SystemExit('Explicit trusted manifest SHA256 required')
-              loaders = ['fabric', 'neoforge'] if env['LOADERS'] == 'both' else [env['LOADERS']]
-              # Stored-plan reuse survives catalog/default-branch migration. Only new releases resolve catalog.
-              identity = dict(version=env['VERSION'], minecraft=env['MC'], channel=env['CHANNEL'],
-                  source_branch=env['ORIGINAL_SOURCE_BRANCH'] or env['SOURCE_BRANCH'], source_sha=env['SOURCE_SHA'],
-                  loaders=rp.normalize_loaders(loaders), curseforge_project=env['CURSEFORGE_PROJECT'] or None,
-                  curseforge_required=env['CURSEFORGE_REQUIRED'] == 'true')
-              tag = rp.validate_identity(**{k: identity[k] for k in ['version', 'minecraft', 'channel', 'source_branch', 'source_sha']})
-              rp.destinations(identity['curseforge_project'], identity['curseforge_required'])
-              if operation == 'github-stage':
-                  run = gh.validate_build_run(gh.GitHubClient(env['GITHUB_TOKEN']), env['BUNDLE_RUN_ID'], env['SOURCE_SHA'])
-                  if run['head_branch'] != identity['source_branch']:
-                      raise SystemExit('Build source branch mismatch')
-              elif env['BUNDLE_RUN_ID']:
-                  raise SystemExit('Resume reads durable bundle, not another build run')
-              bundle_artifact = ''
+          if env['PLAN_RESULT'] != 'success' or env['BUNDLE_BUILD_RESULT'] != 'success':
+              raise SystemExit('release-new requires a successful fixed plan and bundle build')
+          if env['SOURCE_BRANCH'] != 'main':
+              raise SystemExit('release-new must use the main publication source')
+          if env['MANIFEST_SHA256'] != env['BUNDLE_BUILD_MANIFEST_SHA256']:
+              raise SystemExit('release-new bundle manifest output mismatch')
+          if not re.fullmatch('[0-9a-f]{64}', env['MANIFEST_SHA256']):
+              raise SystemExit('release-new manifest SHA256 is missing or invalid')
+          bundle_dir = pathlib.Path(env['RUNNER_TEMP']) / 'release-bundle'
+          manifest_path = bundle_dir / rb.MANIFEST
+          digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+          if digest != env['MANIFEST_SHA256']:
+              raise SystemExit('release-new downloaded manifest hash mismatch')
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'), object_pairs_hook=vt._unique_object)
+          plan = rp.validate_plan(manifest['plan'])
+          workflow = manifest['provenance']['workflow']
+          if (workflow['repository'] != env['REPOSITORY'] or workflow['run_id'] != env['RUN_ID']
+                  or int(workflow['run_attempt']) > int(env['RUN_ATTEMPT'])):
+              raise SystemExit('release-new bundle provenance does not match this workflow run')
+          if plan['source_sha'] != env['SOURCE_SHA'] or plan['source_branch'] != env['SOURCE_BRANCH']:
+              raise SystemExit('release-new bundle source identity mismatch')
+          loaders = ['fabric', 'neoforge'] if env['LOADERS'] == 'both' else [env['LOADERS']]
+          identity = dict(version=env['VERSION'], minecraft=plan['minecraft'], channel=env['CHANNEL'],
+              source_branch=env['SOURCE_BRANCH'], source_sha=env['SOURCE_SHA'],
+              loaders=rp.normalize_loaders(loaders), curseforge_project=env['CURSEFORGE_PROJECT'] or None,
+              curseforge_required=env['CURSEFORGE_REQUIRED'] == 'true')
+          expected_plan = rp.reuse_plan(plan, **identity)
+          rb.verify_bundle(bundle_dir, expected_source_sha=env['SOURCE_SHA'], expected_plan=expected_plan,
+              expected_manifest_sha256=env['MANIFEST_SHA256'])
+          tag = expected_plan['tag']
+          bundle_artifact = env['BUNDLE_BUILD_ARTIFACT']
           expected_identity = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
-          identity_path = pathlib.Path(env['RUNNER_TEMP']) / 'github-requested-identity.json'
-          identity_path.write_text(expected_identity + '\n', encoding='utf-8')
-          identity_artifact = f"github-requested-identity-{env['RUN_ID']}-{env['RUN_ATTEMPT']}"
           with open(env['GITHUB_OUTPUT'], 'a') as stream:
               stream.write('tag=' + tag + '\n')
               stream.write('source-sha=' + env['SOURCE_SHA'] + '\n')
               stream.write('manifest-sha256=' + env['MANIFEST_SHA256'] + '\n')
               stream.write('expected-identity=' + expected_identity + '\n')
-              stream.write('expected-identity-artifact=' + identity_artifact + '\n')
               stream.write('bundle-artifact=' + bundle_artifact + '\n')
           PY
 
-      - name: Save requested immutable identity
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ${{ steps.identity.outputs.expected-identity-artifact }}
-          path: ${{ runner.temp }}/github-requested-identity.json
-          if-no-files-found: error
-          retention-days: 1
-
   github-stage:
-    name: Store/recover verified bundle in GitHub draft
+    name: Store verified bundle in GitHub draft
     needs: [github-inputs]
-    if: ${{ inputs.operation == 'release-new' || inputs.operation == 'github-stage' || inputs.operation == 'github-resume' || inputs.operation == 'publish' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
     outputs:
       tag: ${{ needs.github-inputs.outputs.tag }}
       source-sha: ${{ needs.github-inputs.outputs.source-sha }}
@@ -409,49 +308,21 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: Download requested immutable identity
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: ${{ needs.github-inputs.outputs.expected-identity-artifact }}
-          path: ${{ runner.temp }}/expected
-      - name: Download original verified build artifact
-        if: ${{ inputs.operation == 'github-stage' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: release-bundle-${{ inputs.bundle_run_id }}-${{ inputs.source_sha }}
-          run-id: ${{ inputs.bundle_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ${{ runner.temp }}/github-bundle
       - name: Download this run's verified build artifact
-        if: ${{ inputs.operation == 'release-new' }}
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: ${{ needs.github-inputs.outputs.bundle-artifact }}
           path: ${{ runner.temp }}/github-bundle
-      - name: Restore durable bundle without building
-        if: ${{ inputs.operation == 'github-resume' || inputs.operation == 'publish' }}
+      - name: Verify bundle and stage missing assets only
         shell: bash
         env:
           SOURCE_SHA: ${{ needs.github-inputs.outputs.source-sha }}
           MANIFEST_SHA256: ${{ needs.github-inputs.outputs.manifest-sha256 }}
           TAG: ${{ needs.github-inputs.outputs.tag }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          python3 scripts/publish_github.py restore --tag "$TAG" --source-sha "$SOURCE_SHA" \
-            --manifest-sha256 "$MANIFEST_SHA256" --output "$RUNNER_TEMP/github-bundle" \
-            > "$RUNNER_TEMP/github-restore-result.json"
-      - name: Verify entire durable bundle and stage missing assets only
-        shell: bash
-        env:
-          SOURCE_SHA: ${{ needs.github-inputs.outputs.source-sha }}
-          MANIFEST_SHA256: ${{ needs.github-inputs.outputs.manifest-sha256 }}
-          TAG: ${{ needs.github-inputs.outputs.tag }}
-          BUNDLE_RUN_ID: ${{ inputs.bundle_run_id }}
           RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
           RELEASE_REPOSITORY: ${{ github.repository }}
-          OPERATION: ${{ inputs.operation }}
+          EXPECTED_IDENTITY: ${{ needs.github-inputs.outputs.expected-identity }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -463,23 +334,18 @@ jobs:
           import release_plan as rp
           root = pathlib.Path(os.environ['RUNNER_TEMP'])
           manifest = json.loads((root / 'github-bundle/release-manifest.json').read_text())
-          identity = json.loads((root / 'expected/github-requested-identity.json').read_text())
+          identity = json.loads(os.environ['EXPECTED_IDENTITY'])
           plan = rp.reuse_plan(manifest['plan'], **identity)
-          (root / 'expected/github-expected-plan.json').write_text(rp.canonical_json(plan))
-          if os.environ['OPERATION'] in ('github-stage', 'release-new'):
-              run_id = (os.environ['RELEASE_RUN_ID'] if os.environ['OPERATION'] == 'release-new'
-                        else os.environ['BUNDLE_RUN_ID'])
-              if manifest['provenance']['workflow']['run_id'] != run_id:
-                  raise SystemExit('Bundle provenance run mismatch')
-          if os.environ['OPERATION'] == 'release-new':
-              workflow = manifest['provenance']['workflow']
-              if (workflow['repository'] != os.environ['RELEASE_REPOSITORY']
-                      or int(workflow['run_attempt']) > int(os.environ['RELEASE_RUN_ATTEMPT'])):
-                  raise SystemExit('Bundle provenance attempt/repository mismatch')
+          workflow = manifest['provenance']['workflow']
+          if (workflow['repository'] != os.environ['RELEASE_REPOSITORY']
+                  or workflow['run_id'] != os.environ['RELEASE_RUN_ID']
+                  or int(workflow['run_attempt']) > int(os.environ['RELEASE_RUN_ATTEMPT'])):
+              raise SystemExit('Bundle provenance attempt/repository mismatch')
+          (root / 'github-expected-plan.json').write_text(rp.canonical_json(plan))
           PY
           python3 scripts/publish_github.py stage --bundle "$RUNNER_TEMP/github-bundle" \
             --source-sha "$SOURCE_SHA" --manifest-sha256 "$MANIFEST_SHA256" \
-            --plan "$RUNNER_TEMP/expected/github-expected-plan.json" \
+            --plan "$RUNNER_TEMP/github-expected-plan.json" \
             --state-output "$RUNNER_TEMP/publish-state.json" > "$RUNNER_TEMP/github-stage-result.json"
           {
             echo "GitHub draft staged: \`$TAG\`"
@@ -516,14 +382,12 @@ jobs:
   publish:
     name: Publish ${{ needs.github-stage.outputs.tag }}
     needs: [github-inputs, github-stage]
-    if: ${{ inputs.operation == 'release-new' || inputs.operation == 'publish' }}
     runs-on: ubuntu-latest
     environment:
       name: release-publish
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.github-stage.outputs.tag }}
     permissions:
       contents: write
-      actions: read
     concurrency:
       group: release-${{ needs.github-stage.outputs.tag }}
       cancel-in-progress: false

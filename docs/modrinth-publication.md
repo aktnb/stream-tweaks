@@ -1,28 +1,24 @@
-# 固定 bundle の不足先公開と再開
+# 固定 bundle の公開
 
-2026-10-24 に旧 `mc-publish` 経路を廃止しました。通常公開は `release-new` を1回 dispatch し、
+2026-10-24 に旧 `mc-publish` 経路を廃止しました。workflow の唯一の dispatch 経路は `release-new` です。
 同じ固定 plan と bundle を build → GitHub draft 保管 → `release-publish` Environment 承認 → publish の順に扱います。
-公開時に再ビルドしません。詳しい操作・Required reviewers 設定は[公開・復旧ガイド](release-workflow.md)、
-準備は[不変 bundle](release-bundles.md)、永続保管は[GitHub draft 保管](github-release-staging.md)を参照してください。
+公開時に再ビルドしません。Required reviewers 設定は[公開ガイド](release-workflow.md)、
+bundle 形式は[不変 bundle](release-bundles.md)、GitHub draft 保管は[GitHub 保管](github-release-staging.md)を参照してください。
 
-## 操作
+## workflow 内の公開処理
 
-通常の `release-new` では source SHA と manifest SHA256 を同一 run 内で受け渡します。
+`release-new` では source SHA と manifest SHA256 を同一 run 内で受け渡します。
 `github-stage` job は manifest・provenance・全 asset を照合してから tag と draft を保存します。
 PR / fork artifact は受け付けません。`publish` job は reviewer approval 後に draft から同じ bundle を復元し、
 再検証して Modrinth の不足先だけを作成します。`MODRINTH_TOKEN` 等の配布 secret はこの publish job だけで使います。
 
-失敗時に使う手動 `github-stage`／`github-resume`／`publish` は元 source SHA・manifest hash を固定入力として扱います。
-直接起動の `publish` も `release-publish` Environment 承認が必要です。
-artifact が期限切れでも、draft に保存済みなら `github-resume` / `publish` が利用できます。
-draft の bundle も欠けている場合は停止し、無検証の再ビルド・削除・差替えはしません。
+一時エラーで Publish job が失敗した場合は同じ run の失敗した job だけを再実行します。
+別の stage／resume／publish dispatch はありません。CurseForge を plan に指定する場合は初回の入力で固定します。
 
-実行 ref が main へ移っても、`release_source_branch=26.2` のように**保存 plan の元 branch**を指定します。
-再開は最新 catalog に対象集合を再解決せず、元 plan と明示入力の完全一致を要求します。
-CurseForge を plan に指定した場合、project / required の指定も同一にします。
-新規 plan のみ、その時点の catalog の唯一の公開元を使います。
+## 開発・診断用のローカル CLI
 
-ローカル CLI での同等操作（token は環境から読み、値を引数・ログへ出さない）:
+通常公開は workflow の `release-new` を使います。以下は adapter の直接確認用です。
+token は環境から読み、値を引数・ログへ出さないでください。
 
 ```sh
 python3 scripts/publish_modrinth.py reconcile --bundle "$BUNDLE_DIR" \
@@ -60,7 +56,8 @@ NeoForge の POST 結果自体が不明な場合は、照会で成功を証明�
 
 全必須先が成功するまでは GitHub draft を解除せず、workflow summary と別 artifact に状態を表示・保存します。
 必須 CurseForge が未完了なら finalize も止まります。任意先の必須性は元 plan の値を使います。
-GitHub / Modrinth 間の原子的公開は保証しません。部分成功から同じ ID・同じ bundle で再開します。
+GitHub / Modrinth 間の原子的公開は保証しません。`Publish <tag>` が失敗した場合は同じ run の失敗 job を再実行し、
+同じ ID・同じ bundle で照合します。成功扱いで完了した run に対する別の再開 dispatch はありません。
 
 ## API の根拠と検証範囲
 

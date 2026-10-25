@@ -225,18 +225,21 @@ class ReleaseBundleTest(unittest.TestCase):
             self.assertIn(message, result.stderr)
         self.assertFalse(self.output.exists())
 
-    def test_prepare_workflow_is_read_only_and_shell_blocks_are_syntactically_valid(self):
+    def test_release_workflow_build_is_read_only_and_shell_blocks_are_syntactically_valid(self):
         workflow = (SCRIPTS.parent / '.github/workflows/release.yml').read_text()
-        prepare = re.search(r'^  bundle-build:\n(.*?)(?=^  [a-zA-Z][\w-]*:|\Z)', workflow, re.M | re.S)[1]
-        self.assertIn("inputs.operation == 'prepare-new'", prepare)
-        self.assertIn('needs: [plan]', prepare)
-        self.assertIn('contents: read', prepare)
-        self.assertNotIn('secrets.', prepare)
-        self.assertNotIn('contents: write', prepare)
-        self.assertNotIn('--write-verification-metadata', prepare)
-        self.assertIn('--dependency-verification=strict', prepare)
-        self.assertIn('release_bundle.py verify', prepare)
-        self.assertIn('if-no-files-found: error', prepare)
+        build = re.search(r'^  bundle-build:\n(.*?)(?=^  [a-zA-Z][\w-]*:|\Z)', workflow, re.M | re.S)[1]
+        self.assertNotIn('inputs.operation', workflow)
+        self.assertNotIn('prepare-new', workflow)
+        self.assertIn('plan-artifact: ${{ steps.fixed-plan.outputs.plan-artifact }}', workflow)
+        self.assertIn('name: ${{ needs.plan.outputs.plan-artifact }}', build)
+        self.assertIn('needs: [plan]', build)
+        self.assertIn('contents: read', build)
+        self.assertNotIn('secrets.', build)
+        self.assertNotIn('contents: write', build)
+        self.assertNotIn('--write-verification-metadata', build)
+        self.assertIn('--dependency-verification=strict', build)
+        self.assertIn('release_bundle.py verify', build)
+        self.assertIn('if-no-files-found: error', build)
         for match in re.finditer(r'^        run: \|\n((?:^          .*\n|^\n)+)', workflow, re.M):
             script = '\n'.join(line[10:] if line else '' for line in match[1].splitlines())
             self.assertNotIn('${{', script)

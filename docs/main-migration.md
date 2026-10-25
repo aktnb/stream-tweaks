@@ -118,7 +118,7 @@ MC / Java / Loader properties は元の台帳行と照合し、checkout は固�
 
 ## 切替時に実施した手順（2026-10-24）
 
-以下は実施時に使った順序の記録です。main作成後の検証と2026-10-25のdefault切替・最終readbackは上の記録および末尾の表に反映しています。
+以下は実施時に使った順序と workflow 操作名の記録です。当時選べた `plan-new`／`prepare-new` は現行 Release workflow にはありません。現在の公開 dispatch は `release-new` のみです。main作成後の検証と2026-10-25のdefault切替・最終readbackは上の記録および末尾の表に反映しています。
 
 1. 26.2 を base とする準備 PR を作る。`support-targets.json` の `authority_branch` と、
    現行26.2の両 Loader 行の `source_branch` を **すべて `main`** にする。
