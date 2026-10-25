@@ -3,7 +3,8 @@
 `support-targets.json` を CI・公開計画の対象選択の入口にする。現行の2 target は
 `26.2-fabric` / `26.2-neoforge`。ModMenu は Fabric 限定で、NeoForge でも設定画面自体は利用できる。
 台帳の権威元と両行の公開元は `main` です。mainは2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21がmergeされました。現在のmain SHAは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持し、repository defaultは `main` です。
-2026-10-25の切替後readbackでmain/26.2 refs、default、Rulesetを照合しました。repository Contents APIでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` の4ファイルがあることを確認しました。push run 40163126160は別途 `Build` workflow（`.github/workflows/build.yml`）の成功runで、`CI OK` success、matrix build skipでした.matching tags、GitHub Releases、release assetsはいずれも0件で、この検証では公開していません。移行の実施記録は [main-migration.md](main-migration.md) を参照してください。
+2026-10-25の切替後readbackでmain/26.2 refs、default、Rulesetを照合しました。repository Contents APIでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` の4ファイルがあることを確認しました。push run 40163126160は別途 `Build` workflow（`.github/workflows/build.yml`）の成功runで、`CI OK` success、matrix build skipでした。
+matching tags、GitHub Releases、release assetsはいずれも0件で、この検証では公開していません。移行の実施記録は [main-migration.md](main-migration.md) を参照してください。
 方針は [support-policy.md](support-policy.md)、版番号は [versioning.md](versioning.md) を参照。
 
 ## スキーマと権威元
