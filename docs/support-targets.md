@@ -2,15 +2,15 @@
 
 `support-targets.json` を CI・公開計画の対象選択の入口にする。現行の2 target は
 `26.2-fabric` / `26.2-neoforge`。ModMenu は Fabric 限定で、NeoForge でも設定画面自体は利用できる。
-台帳の権威元と両行の公開元は `main` です。mainは2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21がmergeされました。現在のmain SHAは `de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2` は `da51f9d7e4217e8734ee17fcc2780164595f6e87` を保持し、repository defaultは `main` です。
-2026-10-25の切替後readbackでmain/26.2 refs、default、Rulesetを照合しました。repository Contents APIでは `.github/workflows` に `build.yml`、`release.yml`、`target-build.yml`、`validate-all.yml` の4ファイルがあることを確認しました。push run 40163126160は別途 `Build` workflow（`.github/workflows/build.yml`）の成功runで、`CI OK` success、matrix build skipでした。
+台帳の権威元と両行の公開元は `main` です。mainは2026-10-24に `da51f9d7e4217e8734ee17fcc2780164595f6e87` から作成され、2026-10-25にPR #21がmergeされました。2026-10-25 05:02:25–05:02:27 UTCのreadback snapshotではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`（PR #21 merge commit）、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main` でした。後続merge後のrefはlive readbackで確認してください。
+2026-10-25 05:02:25–05:02:27 UTCの切替後readback snapshotでmain/26.2 refs、default、Rulesetを照合しました。Contents APIでは `.github/workflows` に4ファイルが存在することを確認しました。Actions APIのworkflow name/path/state一覧は [切替後検証記録](main-verification.md) に記録しています。push run 40163126160は別途 `Build` workflow（`.github/workflows/build.yml`）のsuccess runで、`CI OK` success、matrix build skipでした。
 matching tags、GitHub Releases、release assetsはいずれも0件で、この検証では公開していません。移行の実施記録は [main-migration.md](main-migration.md) を参照してください。
 方針は [support-policy.md](support-policy.md)、版番号は [versioning.md](versioning.md) を参照。
 
 ## スキーマと権威元
 
 schema version は1。トップレベルは `schema_version` / `authority_branch` / `targets`。
-現在の台帳は `authority_branch=main` です。各targetの `source_branch` も `main` です。切替後readbackではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、repository default=`main` を確認しました。台帳の文字列だけではdefault切替や移行完了を宣言せず、repository metadataとrefのreadbackを別途確認します。
+現在の台帳は `authority_branch=main` です。各targetの `source_branch` も `main` です。2026-10-25 05:02:25–05:02:27 UTCのref/default snapshotではmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、`26.2`=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main` でした。これらは記録時点の値で、後続merge後のcurrent refはlive readbackで確認します。台帳の文字列だけではdefault切替を宣言せず、repository metadataとrefを別途readbackします。
 これは全体台帳の権威元であり、各 target の `source_branch` とは用途が異なる。
 各 source checkout の `gradle.properties` が実際のビルド値の真実で、台帳を使って上書きしない。
 
