@@ -179,13 +179,13 @@ fixture／ローカル成功だけでは次のremote証拠を代替できませ�
 両方で Python 全200件が成功しました。共有作業ツリーの実台帳は変更していません。
 変更した2 workflow の YAML 構文と5つの shell block も検査済みです。
 
-| #14 の受入条件 | 保存すべき証拠 | 現時点 |
+| #14 の受入条件 | 保存すべき証拠 | 2026-10-25 05:02 UTC切替後readback |
 | --- | --- | --- |
 | main上のPR／単 target／全対象CI・plan成功 | 各run URL、full SHA、target、JDK、結果、plan／bundle hash | main宛てPR #21のmerge後push run [40163126160](https://github.com/aktnb/stream-tweaks/actions/runs/40163126160) はrun head SHA `de91fd9c7761c0308f9bea095ce41f2c7a1c6914` で成功、`CI OK` success、docs-onlyのためmatrix build skip。5件の事前dispatch成功とartifact digestはmain-verification.md |
 | 同MCの公開元main一つ | main・26.2両catalogの公開元と検証出力 | authority/sourceはmain、両targetのsource_branchはmain。2026-10-25 05:02:25–05:02:27 UTCのref snapshotはmain=`de91fd9c7761c0308f9bea095ce41f2c7a1c6914`、26.2=`da51f9d7e4217e8734ee17fcc2780164595f6e87`、default=`main`。後続merge後の現在refはAPIで再取得する |
 | 既存履歴／Tag／Release保存 | 前後のref・peeled SHA・asset hash一覧 | 2026-10-25の切替後readbackでmain/26.2 refsを照合し、matching tags 0件、GitHub Releases 0件、assets 0件を確認 |
 | CI OK必須と対象保護 | ruleset実設定／owner UI readback | 切替後Ruleset readbackは上記のbranch保護記録を参照。classic ruleなしは2026-10-24にowner UI確認 |
 | default切替・失敗時復旧 | 本手順と実施者／日時／復元結果 | 2026-10-25 05:02:25–05:02:27 UTC snapshotでdefault=`main`をreadback。失敗時は本書の復旧手順に従う。切替後の復旧操作はなし |
-| 切替後のworkflow・refs・保護・配布履歴readback | Actions API name/path/state、Contents API file listing、ref snapshot、ruleset、配布履歴 | 2026-10-25 05:02 UTCのActions API一覧はmain-verification.mdに記録。Contents APIはworkflowファイルの存在を確認。run 40163126160は切替後のBuild push run。ref/default snapshot、Ruleset、tags／Releases／assetsは同時点で照合済み |
+| 切替後のworkflow・refs・保護・配布履歴readback | Actions API name/path/state、Contents API file listing、ref snapshot、ruleset、配布履歴 | 2026-10-25 05:02 UTCのActions API一覧はmain-verification.mdに記録。Contents APIはworkflowファイルの存在を確認。run 40163126160はPR #21 merge後のBuild push run。ref/default snapshot、Ruleset、tags／Releases／assetsは同時点で照合済み |
 
 Issue #14 の切替後readback条件は記録済みです。この検証と文書更新では公開操作を行っていません。
