@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.loader }})
+    name: ${{ matrix.loader }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
