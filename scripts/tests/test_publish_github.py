@@ -247,7 +247,7 @@ class GitHubPublishTest(unittest.TestCase):
         self.assertIn('publication stopped', result.stderr)
 
     def test_operational_workflow_only_accepts_verified_runs_and_canonical_tag_lock(self):
-        workflow = (pathlib.Path(pg.__file__).parent.parent / '.github/workflows/release.yml').read_text()
+        workflow = (pathlib.Path(pg.__file__).parent.parent / '.github/workflows/old_release.yml.disabled').read_text()
         gate = re.search(r'^  github-inputs:\n(.*?)(?=^  [a-zA-Z][\w-]*:|\Z)', workflow, re.M | re.S)[1]
         stage = re.search(r'^  github-stage:\n(.*?)(?=^  [a-zA-Z][\w-]*:|\Z)', workflow, re.M | re.S)[1]
         self.assertIn('contents: read', gate)

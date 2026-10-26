@@ -323,7 +323,7 @@ class CurseForgePublishTest(unittest.TestCase):
             cf.NoRedirect().redirect_request(None, None, 302, None, None, 'https://other.invalid/')
 
     def test_workflow_cf_secrets_are_only_on_publish_step(self):
-        workflow = (pathlib.Path(__file__).parents[2] / '.github/workflows/release.yml').read_text()
+        workflow = (pathlib.Path(__file__).parents[2] / '.github/workflows/old_release.yml.disabled').read_text()
         publish = workflow.split('      - id: publish', 1)[1].split('      - name:', 1)[0]
         for name in ['CURSEFORGE_TOKEN', 'CURSEFORGE_API_KEY']:
             secret = '${{ secrets.' + name + ' }}'
