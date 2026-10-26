@@ -126,8 +126,9 @@
 ## CI / リリース
 - CI は `.github/workflows/build.yml`（Build）の1ワークフローです。
   - すべての PR の作成・コミット追加・再オープン時に、PR の merge commit を検証します。
-  - `CI OK` の1ジョブで `:fabric:assemble :neoforge:assemble :fabric:test` を実行します。
-  - Fabric / NeoForge 両方をビルドし、共有テストを1回実行します。
+  - Fabric / NeoForge を別ジョブで並列にビルドします。
+  - Fabric は `:fabric:assemble :fabric:test`、NeoForge は `:neoforge:assemble` を実行します。
+  - 共有テストは Fabric 側で1回実行し、`CI OK` が両ジョブの成功を確認します。
   - Format / Checkstyle、Python テスト、成果物アップロード、公開処理は CI に含めません。
   - Java は `.github/actions/setup-build` が `gradle.properties` の `java_version` を読み取ります。
     Gradle cache を再利用し、`--dependency-verification=strict` を明示します。

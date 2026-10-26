@@ -3,10 +3,18 @@
 `.github/workflows/build.yml`（**Build**）は PR の作成・コミット追加・再オープン時に実行します。
 宛先ブランチや変更パスで絞り込まず、PR の merge commit で Fabric / NeoForge 両方を検証します。
 
-`CI OK` の1ジョブで Java を準備し、次のコマンドを実行します。
+Fabric / NeoForge は別のランナーで Java を準備し、並列に実行します。
+
+Fabric（ビルドと共有テスト）:
 
 ```sh
-./gradlew :fabric:assemble :neoforge:assemble :fabric:test --dependency-verification=strict --stacktrace
+./gradlew :fabric:assemble :fabric:test --dependency-verification=strict --stacktrace
+```
+
+NeoForge（ビルド）:
+
+```sh
+./gradlew :neoforge:assemble --dependency-verification=strict --stacktrace
 ```
 
 - `assemble` は両 Loader のコンパイルと JAR 作成を行います。
@@ -17,7 +25,8 @@ Java は `.github/actions/setup-build` が `gradle.properties` の `java_version
 既存の Gradle キャッシュを再利用し、依存関係は strict モードで検証します。
 権限は `contents: read` のみで、公開用 secret は使用しません。
 
-必須チェック名は引き続き **CI OK** です。ビルドまたはテストの失敗は、このジョブの失敗になります。
+必須チェック名は引き続き **CI OK** です。両ジョブの終了後、成功したことを確認します。
+いずれかが失敗・キャンセル・スキップした場合も集約ジョブを実行し、失敗として扱います。
 同じ PR に新しいコミットが追加された場合、実行中の古い Build は取り消します。
 push 単独・定期実行・手動実行のトリガーはありません。
 

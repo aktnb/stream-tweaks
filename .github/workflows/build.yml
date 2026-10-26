@@ -12,15 +12,42 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: CI OK
+  fabric:
+    name: Fabric Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-build
-      - name: Build both loaders and run shared tests
+      - name: Build Fabric and run shared tests
         run: >-
-          ./gradlew :fabric:assemble :neoforge:assemble :fabric:test
+          ./gradlew :fabric:assemble :fabric:test
           --dependency-verification=strict --stacktrace
+
+  neoforge:
+    name: NeoForge Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-build
+      - name: Build NeoForge
+        run: >-
+          ./gradlew :neoforge:assemble
+          --dependency-verification=strict --stacktrace
+
+  ci-ok:
+    name: CI OK
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [fabric, neoforge]
+    steps:
+      - name: Require both loaders to succeed
+        env:
+          FABRIC_RESULT: ${{ needs.fabric.result }}
+          NEOFORGE_RESULT: ${{ needs.neoforge.result }}
+        run: |
+          test "$FABRIC_RESULT" = success
+          test "$NEOFORGE_RESULT" = success
