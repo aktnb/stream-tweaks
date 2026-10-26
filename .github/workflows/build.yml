@@ -13,12 +13,17 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.loader }}
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         loader: [fabric, neoforge]
+        include:
+          - loader: fabric
+            name: Fabric
+          - loader: neoforge
+            name: NeoForge
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -36,8 +41,8 @@ jobs:
           ./gradlew :fabric:test
           --dependency-verification=strict --stacktrace
 
-  ci-ok:
-    name: CI OK
+  summary:
+    name: Summary
     runs-on: ubuntu-24.04
     if: always()
     needs: [build]

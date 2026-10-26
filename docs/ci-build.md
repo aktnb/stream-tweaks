@@ -28,10 +28,15 @@ Java は `.github/actions/setup-build` が `gradle.properties` の `java_version
 既存の Gradle キャッシュを再利用し、依存関係は strict モードで検証します。
 権限は `contents: read` のみで、公開用 secret は使用しません。
 
-必須チェック名は引き続き **CI OK** です。両ジョブの終了後、成功したことを確認します。
+チェック表示は **Build / Fabric**、**Build / NeoForge**、**Build / Summary** です。
+**Summary** は両ジョブの終了後、成功したことを確認します。
 いずれかが失敗・キャンセル・スキップした場合も集約ジョブを実行し、失敗として扱います。
 同じ PR に新しいコミットが追加された場合、実行中の古い Build は取り消します。
 push 単独・定期実行・手動実行のトリガーはありません。
+
+導入時は main の必須チェックを **CI OK** から **Summary** へ切り替えます。
+現在の Ruleset は main と26.2を共有しているため、26.2の旧 Workflow が使う **CI OK** は維持し、
+必須チェックのルールをブランチ別に分けて設定します。
 
 ## 旧ワークフロー
 

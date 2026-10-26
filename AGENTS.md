@@ -128,7 +128,8 @@
   - すべての PR の作成・コミット追加・再オープン時に、PR の merge commit を検証します。
   - `matrix.loader: [fabric, neoforge]` で両 Loader を並列にビルドします（`fail-fast: false`）。
   - 各 Loader の `assemble` を実行し、Fabric のみ追加ステップで `:fabric:test` を実行します。
-  - 共有テストは Fabric 側で1回実行し、`CI OK` が両ジョブの成功を確認します。
+  - 表示名は `Fabric` / `NeoForge` とし、共有テストは Fabric 側で1回実行します。
+  - `Summary` が両ジョブの成功を確認します。main の必須チェックは導入時に `CI OK` から切り替えます。
   - Format / Checkstyle、Python テスト、成果物アップロード、公開処理は CI に含めません。
   - Java は `.github/actions/setup-build` が `gradle.properties` の `java_version` を読み取ります。
     Gradle cache を再利用し、`--dependency-verification=strict` を明示します。
