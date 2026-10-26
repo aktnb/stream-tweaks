@@ -256,7 +256,8 @@ class ModrinthPublishTest(unittest.TestCase):
         gate_code = '\n'.join(line[10:] for line in gate_code.splitlines())
         bundle_artifact = 'release-bundle-123-' + 'a' * 40 + '-attempt-1'
         env = dict(os.environ, VERSION=self.fixture.plan['mod_version'], CHANNEL='release', LOADERS='both',
-                   SOURCE_BRANCH='main', CURSEFORGE_PROJECT='', CURSEFORGE_REQUIRED='false',
+                   SOURCE_BRANCH='main', SOURCE_REF='refs/heads/main', CURSEFORGE_PROJECT='',
+                   CURSEFORGE_REQUIRED='false',
                    PLAN_RESULT='success', BUNDLE_BUILD_RESULT='success', SOURCE_SHA='a' * 40,
                    MANIFEST_SHA256=self.options['expected_manifest_sha256'],
                    BUNDLE_BUILD_MANIFEST_SHA256=self.options['expected_manifest_sha256'],
@@ -269,6 +270,10 @@ class ModrinthPublishTest(unittest.TestCase):
         result = subprocess.run([__import__('sys').executable, '-c', gate_code], env=env, cwd=root,
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+        tag_ref_env = env | {'SOURCE_REF': 'refs/tags/main'}
+        tag_ref_result = subprocess.run([__import__('sys').executable, '-c', gate_code], env=tag_ref_env, cwd=root,
+                                        capture_output=True, text=True)
+        self.assertNotEqual(tag_ref_result.returncode, 0)
         outputs = dict(line.split('=', 1) for line in (self.fixture.directory / 'outputs').read_text().splitlines())
         identity = json.loads(outputs['expected-identity'])
         self.assertEqual(identity['source_branch'], 'main')

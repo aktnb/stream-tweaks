@@ -2,9 +2,8 @@
 
 Release workflow の唯一の dispatch 経路 `release-new` が、同じ run 内で plan/build → GitHub draft 保管 →
 Environment 承認後の publish を行います。公開なしの prepare dispatch はありません。
-Release workflow の `release_version` に
-`0.3.4-beta.1` のような純 SemVer、`channel` と `loaders` を明示すると、開始時 SHA の固定計画を作り、
-その SHA を checkout して全選択 Loader の build/check と共有テストを実行します。
+Release workflow の `channel` と `loaders` を選ぶと、`gradle.properties` の `mod_version` と既存 tag から
+版を決めて開始時 SHA の固定計画を作り、その SHA を checkout して全選択 Loader の build/check と共有テストを実行します。
 stable の片 Loader も計画できます。旧 `operation=legacy` / mc-publish 経路は削除済みです。
 
 build job の権限は `contents: read`、公開 secret は参照しません。単一 Gradle task graph で共有テストを1回実行し、
@@ -33,7 +32,8 @@ manifest schema 1 は次の情報を固定します。
 - Wrapper distribution checksum、verification metadata 自体の SHA256、成功した build/check/test task、workflow run。
 
 notes は `changelog_tool.py` の parser と Loader filter を再利用します。stable は一致する版セクション、
-alpha/beta は同じ source SHA の Unreleased を使います。CHANGELOG の更新やプレ番号の採番は行いません。
+alpha/beta は同じ source SHA の Unreleased を使います。CHANGELOG の更新は行いません。
+alpha/beta のプレ番号は固定 plan 作成時に同じ基準版・MC・channel の既存 tag から割り当てます。
 `release-new` の bundle build は Unreleased 全文を固定し、従来経路の前回 tag 以降の差分採取とは区別します。
 
 `scripts/release_bundle.py` の `create_bundle()` / `verify_bundle()` は後続 adapter から利用できます。

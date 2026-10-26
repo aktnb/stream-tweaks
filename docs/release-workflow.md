@@ -1,8 +1,9 @@
 # 固定 bundle による公開と失敗時の対応
 
-手順切替版: **2026-10-25**（`release-new` 単一路線）。この版の workflow を公開元へ導入した後に使用します。
+手順切替版: **2026-10-25**（`release-new` 単一路線、alpha/beta の自動採番）。この版の workflow を公開元へ導入した後に使用します。
 導入前の[旧版ガイド（06436c1）](https://github.com/aktnb/stream-tweaks/blob/06436c1607e826b5d2dfaccb3edfebd7d23ed7f6/docs/release-workflow.md)
-は履歴の参照専用です。旧版の自動採番・削除による復旧は使用せず、旧 workflow と同時に公開しません。
+は履歴の参照専用です。旧版の tag／Release 削除による復旧は行わず、現行の alpha/beta 採番規則は本書1節に従います。
+旧・新 workflow を同時に公開しません。
 この文書だけで remote への導入・公開済みであるとは扱いません。
 
 Release は純 SemVer × Minecraft、同 MC の Loader は同じ full source SHA です。
@@ -58,25 +59,29 @@ draft と tag は調査用に残ります。
 
 ## 1. 公開元と版を準備する
 
-変更を `main` へ merge します。`release-new` が選択 Loader の build/check を dependency verification strict で実行します。
-alpha／beta は `0.3.4-alpha.1`／`0.3.4-beta.1` のように番号まで固定します。
-stable は対応する `CHANGELOG.md` の版セクションを先に用意します。
+変更を `main` へ merge します。workflow は `gradle.properties` の `mod_version` を基準版にします。
+`alpha` / `beta` は同じ基準版・MC・channel の既存 tag の最大番号に1を足して自動採番し、残った tag も番号を予約します。
+`release` は基準版をそのまま使うため、stable 公開前に `mod_version` と対応する `CHANGELOG.md` の版セクションを用意します。
+`release-new` は選択 Loader の build/check を dependency verification strict で実行します。
 
 ```sh
-python3 scripts/changelog_tool.py release --version 0.3.4 --update-file
-python3 scripts/changelog_tool.py read --version 0.3.4
+RELEASE_BASE="$(sed -nE 's/^mod_version=([^[:space:]#]+).*$/\1/p' gradle.properties)"
+python3 scripts/changelog_tool.py release --version "$RELEASE_BASE" --update-file
+python3 scripts/changelog_tool.py read --version "$RELEASE_BASE"
 ```
 
 ## 2. 通常公開は1回起動
 
-GitHub Actions の `Release` を `main` ref から1回実行し、version／channel／loaders を入力します。CLI の例:
+GitHub Actions の `Release` を `main` ref から1回実行し、channel／loaders を選びます。CLI の例:
 
 ```sh
 gh workflow run release.yml --repo aktnb/stream-tweaks --ref main \
-  -f channel=beta -f loaders=both \
-  -f release_version=0.3.4-beta.1
+  -f channel=beta -f loaders=both
 gh run list --repo aktnb/stream-tweaks --workflow release.yml --limit 5
 ```
+
+workflow dispatch で選ぶ release channel は `alpha` / `beta` / `release` です。バージョン入力はありません。
+run summary に割り当てた版が表示されます。
 
 `release-new` は固定 plan → build/check → bundle 検証 → annotated tag／GitHub draft 保管を行います。
 source SHA と manifest SHA256 は run 内で検証・受け渡しするため、通常時に転記する必要はありません。
@@ -96,7 +101,9 @@ GitHub tag／draft は削除・差替えしません。
 
 独立した stage／resume／publish dispatch はありません。`Publish <tag>` より前に失敗した job は同じ run で再実行します。
 承認が拒否された場合や同じ run を再実行できない場合、別の workflow dispatch での再開経路はありません。
-同じ版で新しい `release-new` を起動すると別 provenance の bundle を作るため、既存 tag／draft の状態を確認せず再実行しないでください。
+同じ run では失敗した job だけを再実行し、固定済み plan と bundle を使います。タグ作成後に workflow 全体を再実行すると、
+既存 tag を番号予約済みとみなして次の beta/alpha 番号を割り当てます。別の workflow dispatch を復旧目的に使わず、
+既存 tag／draft の状態を確認してください。
 
 各 Modrinth version の project・MC・Loader・version・契約 metadata・通常 JAR の SHA512 を再照会します。
 一致する既存 version は POST せず、未 POST の不足先だけを追加します。POST 応答が不明で完全一致を証明できない場合は停止します。

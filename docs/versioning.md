@@ -1,6 +1,6 @@
 # ADR-002: Mod version とリリース識別
 
-決定日: 2026-10-24。状態: 採用。[対応方針](support-policy.md) と組み合わせて適用する。
+決定日: 2026-10-24。更新日: 2026-10-25。状態: 採用。[対応方針](support-policy.md) と組み合わせて適用する。
 
 ## 公開契約
 
@@ -43,10 +43,14 @@ GitHub Release は **SemVer × MC**。既存の識別子とファイル名を維
 `+mc...` は環境を識別するためだけに使い、SemVer の優先順位に使わない。
 外部識別子 `<tag>-<loader>` 自体も比較用 SemVer として解釈しない。
 
-alpha / beta は `alpha.N` / `beta.N`（N は1以上、先頭ゼロなし）を事前に明示・予約する。
-例: `0.4.0-alpha.2` の失敗を再実行するときも同じ番号を使い、自動的に `.3` を採番しない。
-stable はプレ版接尾辞のない版。計画は台帳の supported 行から明示選択した Loader 集合、MC、
-channel、純 SemVer、唯一の公開元と full source SHA を固定する。
+Release workflow では `gradle.properties` の `mod_version` を基準版として使う。
+`alpha` / `beta` は、同じ基準版・MC・channel の既存 tag `v<版>-<channel>.N+mc<MC>` の最大番号に
+1 を足して割り当てる（N は1以上、先頭ゼロなし）。失敗後も残った tag は番号を予約し、番号を再利用しない。
+stable (`release`) は基準版そのものを使い、対応する tag が既にあれば停止する。
+次の stable 版を公開する前に `mod_version` と changelog の版セクションを更新する。
+workflow 全体は ref 単位で直列化し、同じ tag 番号の競合を防ぐ。
+計画は台帳の supported 行から明示選択した Loader 集合、MC、channel、純 SemVer、
+唯一の公開元と full source SHA を固定する。
 stable でも片 Loader の選択を許可し、`both` を必須にしない。
 同じ release ID の再利用は SHA と対象集合が完全に一致するときだけ認め、相違は停止する。
 
@@ -65,17 +69,17 @@ build / check 成功後、固定計画から生成した JAR / notes / manifest 
 全必須先の成功後に GitHub draft を解除する。配布先間の原子的公開は保証しない。
 
 2026-10-24切替版（[#9](https://github.com/aktnb/stream-tweaks/issues/9)〜
-[#13](https://github.com/aktnb/stream-tweaks/issues/13)）の workflow は、固定番号・stable 単 Loader・既存一致再利用を実装する。
-この版の導入前に新方式で公開できるとは扱わず、旧・新 workflow の同時公開を禁止する。
-実行可能な手順は [release-workflow.md](release-workflow.md) で確認する。
+[#13](https://github.com/aktnb/stream-tweaks/issues/13)）で stable 単 Loader と既存一致再利用を導入し、
+2026-10-25 の更新で workflow dispatch の alpha/beta 番号を tag から自動採番する。
+旧・新 workflow を同時に公開せず、実行可能な手順は [release-workflow.md](release-workflow.md) で確認する。
 
 ## 固定計画の CLI（公開なし）
 
 `scripts/release_plan.py` は純 SemVer と channel を照合し、台帳の supported 行から選んだ
 MC / Loader、唯一の公開元、full source SHA、Java、ファイル名、公開先契約を固定する。
-alpha / beta は必ず明示番号を渡す。通常版は `--channel release --version 0.3.4` とし、片 Loader でもよい。
-現在の公開元は `main` です。通常の公開では以下の plan CLI を直接起動せず、後述の唯一の workflow 経路
-`release-new` を使います。plan CLI は内部処理やローカル診断向けです。
+ローカル plan CLI は引き続き `--version` を明示する。通常の公開では以下の plan CLI を直接起動せず、
+`gradle.properties` と既存 tag から版を決める唯一の workflow 経路 `release-new` を使います。
+plan CLI は内部処理やローカル診断向けです。
 
 ```sh
 python3 scripts/release_plan.py new \

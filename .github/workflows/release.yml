@@ -12,12 +12,8 @@ on:
         description: '計画でCurseForge成功を必須にする（未指定なら任意先）'
         type: boolean
         default: false
-      release_version:
-        description: 'リリース用の純SemVer（例: 0.3.4-beta.1、プレ番号は固定）'
-        type: string
-        required: true
       channel:
-        description: 'リリースチャンネル'
+        description: 'alpha/beta は次番号を自動採番し、release は mod_version を使う'
         type: choice
         required: true
         options:
@@ -35,8 +31,9 @@ on:
           - neoforge
 
 concurrency:
-  # Serialize the selected version on the publication branch; the write jobs also lock the validated tag.
-  group: release-${{ inputs.release_version }}-${{ github.ref_name }}
+  # Version assignment reads existing tags, so serialize the full release workflow per ref.
+  group: release-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 permissions:
@@ -50,20 +47,22 @@ jobs:
       contents: read
     outputs:
       source-sha: ${{ steps.fixed-plan.outputs.source-sha }}
+      release-version: ${{ steps.fixed-plan.outputs.version }}
       plan-artifact: ${{ steps.fixed-plan.outputs.plan-artifact }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - id: fixed-plan
         name: Compute fixed plan
         shell: bash
         env:
-          VERSION: ${{ inputs.release_version }}
           CHANNEL: ${{ inputs.channel }}
           LOADERS: ${{ inputs.loaders }}
           SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_REF: ${{ github.ref }}
           SOURCE_SHA: ${{ github.sha }}
           RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -76,11 +75,14 @@ jobs:
             fabric|neoforge) LOADER_ARGS=(--loader "$LOADERS") ;;
             *) exit 1 ;;
           esac
-          MC_VERSION="$(sed -nE 's/^minecraft_version=([^[:space:]#]+).*$/\1/p' gradle.properties)"
-          if [[ "$SOURCE_BRANCH" != main ]]; then
-            echo 'release-new は main ref からのみ実行できます' >&2
+          if [[ "$SOURCE_REF" != refs/heads/main ]]; then
+            echo 'release-new は main branch ref からのみ実行できます' >&2
             exit 1
           fi
+          BASE_VERSION="$(sed -nE 's/^mod_version=([^[:space:]#]+).*$/\1/p' gradle.properties)"
+          MC_VERSION="$(sed -nE 's/^minecraft_version=([^[:space:]#]+).*$/\1/p' gradle.properties)"
+          VERSION="$(python3 scripts/release_version.py --base "$BASE_VERSION" \
+            --minecraft "$MC_VERSION" --channel "$CHANNEL")"
           PLAN_ARGS=(new --version "$VERSION" --minecraft "$MC_VERSION" --channel "$CHANNEL"
             --source-branch "$SOURCE_BRANCH" --source-sha "$SOURCE_SHA"
             --properties gradle.properties "${LOADER_ARGS[@]}" --output "$RUNNER_TEMP/release-plan.json")
@@ -88,8 +90,11 @@ jobs:
           if [[ "$CURSEFORGE_REQUIRED" == true ]]; then PLAN_ARGS+=(--curseforge-required); fi
           python3 scripts/release_plan.py "${PLAN_ARGS[@]}"
           printf 'source-sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
           printf 'plan-artifact=release-plan-%s-%s-attempt-%s\n' \
             "$RELEASE_RUN_ID" "$SOURCE_SHA" "$RELEASE_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          printf '選択チャンネル: `%s`\n割り当てバージョン: `%s`\n' \
+            "$CHANNEL" "$VERSION" >> "$GITHUB_STEP_SUMMARY"
           echo '固定計画を作成しました。' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save fixed plan
@@ -229,10 +234,11 @@ jobs:
         name: Validate immutable publication inputs
         shell: bash
         env:
-          VERSION: ${{ inputs.release_version }}
+          VERSION: ${{ needs.plan.outputs.release-version }}
           CHANNEL: ${{ inputs.channel }}
           LOADERS: ${{ inputs.loaders }}
           SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_REF: ${{ github.ref }}
           CURSEFORGE_PROJECT: ${{ inputs.curseforge_project }}
           CURSEFORGE_REQUIRED: ${{ inputs.curseforge_required }}
           PLAN_RESULT: ${{ needs.plan.result }}
@@ -255,6 +261,8 @@ jobs:
               raise SystemExit('release-new requires a successful fixed plan and bundle build')
           if env['SOURCE_BRANCH'] != 'main':
               raise SystemExit('release-new must use the main publication source')
+          if env['SOURCE_REF'] != 'refs/heads/main':
+              raise SystemExit('release-new must use the main branch ref')
           if env['MANIFEST_SHA256'] != env['BUNDLE_BUILD_MANIFEST_SHA256']:
               raise SystemExit('release-new bundle manifest output mismatch')
           if not re.fullmatch('[0-9a-f]{64}', env['MANIFEST_SHA256']):
