@@ -3,12 +3,15 @@
 `.github/workflows/build.yml`（**Build**）は PR の作成・コミット追加・再オープン時に実行します。
 宛先ブランチや変更パスで絞り込まず、PR の merge commit で Fabric / NeoForge 両方を検証します。
 
-Fabric / NeoForge は別のランナーで Java を準備し、並列に実行します。
+`build` ジョブの `matrix.loader: [fabric, neoforge]` で、別のランナーに展開して並列実行します。
+`fail-fast: false` により、一方が失敗しても他方の検証は続行します。
+checkout・Java 準備・ビルド手順を共通化し、共有テストのステップは Fabric のみで実行します。
 
 Fabric（ビルドと共有テスト）:
 
 ```sh
-./gradlew :fabric:assemble :fabric:test --dependency-verification=strict --stacktrace
+./gradlew :fabric:assemble --dependency-verification=strict --stacktrace
+./gradlew :fabric:test --dependency-verification=strict --stacktrace
 ```
 
 NeoForge（ビルド）:

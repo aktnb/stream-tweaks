@@ -2,7 +2,6 @@
 import pathlib
 import re
 import os
-import itertools
 import subprocess
 import textwrap
 import unittest
@@ -33,16 +32,18 @@ class BuildWorkflowTest(unittest.TestCase):
         workflow = (WORKFLOWS / 'build.yml').read_text()
         jobs = dict(re.findall(r'^  ([\w-]+):\n(.*?)(?=^  [\w-]+:|\Z)',
                                workflow.split('\njobs:\n', 1)[1], re.M | re.S))
-        self.assertEqual(set(jobs), {'fabric', 'neoforge', 'ci-ok'})
-        self.assertNotIn('needs:', jobs['fabric'])
-        self.assertNotIn('needs:', jobs['neoforge'])
+        self.assertEqual(set(jobs), {'build', 'ci-ok'})
+        self.assertNotIn('needs:', jobs['build'])
+        self.assertIn('loader: [fabric, neoforge]', jobs['build'])
+        self.assertIn('fail-fast: false', jobs['build'])
         self.assertIn('name: CI OK', workflow)
         self.assertEqual(workflow.count('./gradlew'), 2)
-        self.assertIn('./gradlew :fabric:assemble :fabric:test', jobs['fabric'])
-        self.assertIn('./gradlew :neoforge:assemble', jobs['neoforge'])
-        self.assertNotIn(':fabric:test', jobs['neoforge'])
-        for name in ('fabric', 'neoforge'):
-            self.assertIn('--dependency-verification=strict --stacktrace', jobs[name])
+        self.assertIn('LOADER: ${{ matrix.loader }}', jobs['build'])
+        self.assertIn('./gradlew ":${LOADER}:assemble"', jobs['build'])
+        test_step = jobs['build'].split('      - name: Run shared tests\n', 1)[1]
+        self.assertIn("if: matrix.loader == 'fabric'", test_step)
+        self.assertIn('./gradlew :fabric:test', test_step)
+        self.assertEqual(jobs['build'].count('--dependency-verification=strict --stacktrace'), 2)
         for forbidden in ('spotless', 'checkstyle', './gradlew build', 'upload-artifact', 'ci_targets.py'):
             self.assertNotIn(forbidden, workflow)
 
@@ -50,16 +51,15 @@ class BuildWorkflowTest(unittest.TestCase):
         workflow = (WORKFLOWS / 'build.yml').read_text()
         gate = workflow.split('\n  ci-ok:\n', 1)[1]
         self.assertIn('if: always()', gate)
-        self.assertIn('needs: [fabric, neoforge]', gate)
-        self.assertIn('FABRIC_RESULT: ${{ needs.fabric.result }}', gate)
-        self.assertIn('NEOFORGE_RESULT: ${{ needs.neoforge.result }}', gate)
+        self.assertIn('needs: [build]', gate)
+        self.assertIn('BUILD_RESULT: ${{ needs.build.result }}', gate)
         script = textwrap.dedent(gate.split('        run: |\n', 1)[1])
-        for fabric, neoforge in itertools.product(('success', 'failure', 'cancelled', 'skipped'), repeat=2):
-            with self.subTest(fabric=fabric, neoforge=neoforge):
+        for state in ('success', 'failure', 'cancelled', 'skipped'):
+            with self.subTest(state=state):
                 result = subprocess.run(['bash', '-e', '-c', script],
-                                        env={**os.environ, 'FABRIC_RESULT': fabric, 'NEOFORGE_RESULT': neoforge},
+                                        env={**os.environ, 'BUILD_RESULT': state},
                                         capture_output=True)
-                self.assertEqual(result.returncode == 0, fabric == neoforge == 'success')
+                self.assertEqual(result.returncode == 0, state == 'success')
 
     def test_build_has_no_publication_access_and_pins_external_actions(self):
         workflow = (WORKFLOWS / 'build.yml').read_text()
