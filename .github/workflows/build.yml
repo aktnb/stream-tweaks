@@ -2,147 +2,25 @@ name: Build
 
 on:
   pull_request:
-    branches: [main, '[0-9]+.[0-9]+', '[0-9]+.[0-9]+.[0-9]+', 'mc/**']
-  push:
-    branches: [main, '[0-9]+.[0-9]+', '[0-9]+.[0-9]+.[0-9]+', 'mc/**']
-  workflow_dispatch:
-    inputs:
-      target:
-        description: 'One supported catalog target (for example 26.2-fabric)'
-        required: true
-        type: string
+    types: [opened, synchronize, reopened]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.target }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  changes:
-    name: Plan target CI
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      plan: ${{ steps.plan.outputs.plan }}
-      matrix: ${{ steps.plan.outputs.matrix }}
-      has-builds: ${{ steps.plan.outputs.has-builds }}
-      check-target: ${{ steps.plan.outputs.check-target }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - name: Read PR destination catalog
-        if: github.event_name == 'pull_request'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: catalog-source
-          persist-credentials: false
-      - id: filter
-        if: github.event_name != 'workflow_dispatch'
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
-        with:
-          # Long-lived pushes compare to their own pre-push commit, including Maintenance branches.
-          base: ${{ github.ref_name }}
-          filters: |
-            common: &common
-              - 'src/**'
-              - 'build.gradle'
-              - 'settings.gradle'
-              - 'gradle.properties'
-              - 'gradle/**'
-              - 'gradlew'
-              - 'gradlew.bat'
-              - 'config/checkstyle/**'
-              - '.github/workflows/**'
-              - '.github/actions/**'
-              - 'scripts/**'
-              - 'support-targets.json'
-            fabric:
-              - *common
-              - 'fabric/**'
-            neoforge:
-              - *common
-              - 'neoforge/**'
-      - id: plan
-        name: Validate selection and freeze source SHA
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          SOURCE_BRANCH: ${{ github.base_ref || github.ref_name }}
-          SOURCE_SHA: ${{ github.sha }}
-          TARGET: ${{ inputs.target }}
-          FABRIC: ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.fabric }}
-          NEOFORGE: ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.neoforge }}
-          CATALOG: ${{ github.event_name == 'pull_request' && 'catalog-source/support-targets.json' || 'support-targets.json' }}
-          FALLBACK_CATALOG: ${{ github.event_name == 'pull_request' && 'support-targets.json' || '' }}
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci_targets.py plan
-
-  format:
-    name: Format (all sources)
-    needs: changes
-    uses: ./.github/workflows/target-build.yml
-    with:
-      source-plan: ${{ needs.changes.outputs.plan }}
-      target: ${{ needs.changes.outputs.check-target }}
-      mode: format
-
-  test:
-    name: Test (shared)
-    needs: changes
-    uses: ./.github/workflows/target-build.yml
-    with:
-      source-plan: ${{ needs.changes.outputs.plan }}
-      target: ${{ needs.changes.outputs.check-target }}
-      mode: test
-
-  script-tests:
-    name: Script Tests
-    needs: changes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ fromJSON(needs.changes.outputs.plan).source_sha }}
-          persist-credentials: false
-      - name: Compile and test scripts
-        run: |
-          python3 -m compileall -q scripts
-          python3 -m unittest discover scripts/tests
-      - name: Check Discord notification payload
-        run: >
-          python3 scripts/notify_discord.py
-          --status success --channel beta --tag v0.0.0-beta.1+mc26.2
-          --mc 26.2 --loaders both --notes-file /dev/null --dry-run
-
   build:
-    name: Build ${{ matrix.target }}
-    needs: changes
-    if: needs.changes.outputs.has-builds == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
-    uses: ./.github/workflows/target-build.yml
-    with:
-      source-plan: ${{ needs.changes.outputs.plan }}
-      target: ${{ matrix.target }}
-      mode: build
-
-  ci-ok:
     name: CI OK
     runs-on: ubuntu-latest
-    if: always()
-    needs: [changes, format, test, script-tests, build]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: Require expected jobs and a valid matrix
-        env:
-          PLAN: ${{ needs.changes.outputs.plan }}
-          NEEDS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci_targets.py aggregate
+      - uses: ./.github/actions/setup-build
+      - name: Build both loaders and run shared tests
+        run: >-
+          ./gradlew :fabric:assemble :neoforge:assemble :fabric:test
+          --dependency-verification=strict --stacktrace

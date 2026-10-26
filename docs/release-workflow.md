@@ -1,5 +1,8 @@
 # 固定 bundle による公開と失敗時の対応
 
+> **停止中の旧手順です。** Release ワークフローは `.github/workflows/old_release.yml.disabled` に退避しています。
+> 以下の dispatch 手順は現在の構成では使用できません。現在の CI は [Build ガイド](ci-build.md) を参照してください。
+
 手順切替版: **2026-10-25**（`release-new` 単一路線）。この版の workflow を公開元へ導入した後に使用します。
 導入前の[旧版ガイド（06436c1）](https://github.com/aktnb/stream-tweaks/blob/06436c1607e826b5d2dfaccb3edfebd7d23ed7f6/docs/release-workflow.md)
 は履歴の参照専用です。旧版の自動採番・削除による復旧は使用せず、旧 workflow と同時に公開しません。

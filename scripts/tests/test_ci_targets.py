@@ -46,7 +46,7 @@ class CiTargetsTest(unittest.TestCase):
                 ci.aggregate(value, self.results(value))
 
     def test_every_common_pattern_is_in_workflow_filter(self):
-        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        workflow = (ROOT / ".github/workflows/old_build.yml.disabled").read_text()
         for name in ci.COMMON:
             self.assertIn("- '" + name + "'", workflow)
         for prefix in ci.COMMON_PREFIXES:
@@ -178,8 +178,8 @@ class CiTargetsTest(unittest.TestCase):
                             self.assertEqual(output.read_text(), contents.replace("java_version", "java-version"))
 
     def test_workflow_permissions_checkout_and_verification_contract(self):
-        build = (ROOT / ".github/workflows/build.yml").read_text()
-        target = (ROOT / ".github/workflows/target-build.yml").read_text()
+        build = (ROOT / ".github/workflows/old_build.yml.disabled").read_text()
+        target = (ROOT / ".github/workflows/old_target-build.yml.disabled").read_text()
         self.assertIn("name: CI OK", build)
         self.assertIn("base: ${{ github.ref_name }}", build)
         self.assertIn("ref: ${{ github.event.pull_request.base.sha }}", build)

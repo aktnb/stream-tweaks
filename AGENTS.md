@@ -124,35 +124,21 @@
 - 変更前後で少なくとも `./gradlew build` を実行して確認してください。
 
 ## CI / リリース
-- CI は `.github/workflows/build.yml` で実行されます。
-  - `main` / 数値 MC ブランチ / `mc/<数値MC>` の PR・push と、単一 supported target を指定する
-    `workflow_dispatch` に対応します。`changes` が path filter と catalog から full source SHA・対象 matrix を固定します。
-  - PR は宛先 `base.sha` の catalog と merge SHA を使います。宛先 catalog が不存在の場合だけ導入用に merge 版へ
-    fallback し、summary に明示します。不正 catalog や権限エラーでの fallback は禁止します。
-  - 有効な計画では `format`（全体 `spotlessCheck`）、`test`（`:fabric:test` を1回）、`script-tests`
-    （Python compile / unittest と通知 dry-run）を変更パスによらず実行します。共有テストには MC 依存テストも含みます。
-  - `build` は共通変更で全 supported Loader、Loader 固有変更で該当 Loader の matrix を実行します。
-    docs のみなら build は省略し、dispatch は指定 target のみをビルドします。
-  - format / test / build は `.github/workflows/target-build.yml` を再利用します。Loader build は
-    `:<loader>:build -x test` と通常 JAR 検証を行い、target と full source SHA を含む名で artifact を保存します。
-  - `ci-ok`（表示名 `CI OK`）が plan / matrix と必要 job を厳密に集約します。build 対象が空の場合だけその skip を許可し、
-    不正 matrix・失敗・取消・予期しない skip は失敗します。唯一の必須 check 方針は維持します。
-  - Java は対象 checkout の `gradle.properties` の `java_version` を `.github/actions/setup-build` が読み取ります。
-    既存の setup-java Gradle cache を使い、各 Gradle 経路で strict dependency verification を明示します。
-    reusable job の summary には target / SHA / 実 JDK / 結果 / cache exact hit / Gradle 実行秒数を記録します。
-- リリースは `.github/workflows/release.yml` の手動実行（`workflow_dispatch`）で行います。
-  - `release_version` に alpha/beta の番号を含む純 SemVer を明示し、`channel` と `loaders` を固定します。
-    supported であれば stable 単 Loader も許可します。公開後の Loader 追加は新 PATCH とします。
-  - 唯一の dispatch 経路は `release-new` です。計画、build/check、bundle 検証、GitHub draft 保管、
-    `release-publish` Environment の承認後の公開までを同じ run で行います。
-  - `Publish <tag>` の失敗時は同じ run の失敗した job だけを再実行します。個別の stage／resume／publish dispatch はありません。
-  - attempt / verified receipt と外部 ID は別 publish-state に記録します。応答喪失時に成功を証明できなければ停止し、
-    tag / Release / version の削除・上書きや無検証の再ビルドで復旧しません。旧 mc-publish 経路は使用しません。
-  - changelog は `scripts/changelog_tool.py --loaders` を再利用します。Discord は finalize 成功後だけ通知し、
-    `DISCORD_WEBHOOK_URL` 未設定なら通知を省略します。具体的手順・必要権限は `docs/release-workflow.md` を参照してください。
+- CI は `.github/workflows/build.yml`（Build）の1ワークフローです。
+  - すべての PR の作成・コミット追加・再オープン時に、PR の merge commit を検証します。
+  - `CI OK` の1ジョブで `:fabric:assemble :neoforge:assemble :fabric:test` を実行します。
+  - Fabric / NeoForge 両方をビルドし、共有テストを1回実行します。
+  - Format / Checkstyle、Python テスト、成果物アップロード、公開処理は CI に含めません。
+  - Java は `.github/actions/setup-build` が `gradle.properties` の `java_version` を読み取ります。
+    Gradle cache を再利用し、`--dependency-verification=strict` を明示します。
+  - push 単独・定期・手動実行はありません。同じ PR の古い実行は取り消します。
+- 旧 Build / Target build / Validate supported targets / Release は
+  `.github/workflows/old_*.yml.disabled` に退避し、無効化しています。
+  新しい Release の運用を用意するまで公開と全対象定期検証は停止します。
 - ワークフロー内では `run:` ブロックに `${{ }}` を書かず、必ず `env:` 経由でクオートして参照します。
-  action は commit SHA で pin します。
-- 補足手順は `docs/ci-build.md` と `docs/release-workflow.md` を参照してください。
+  action は commit SHA で pin します。CI の権限は `contents: read` のみです。
+- 現在の手順は `docs/ci-build.md`、旧 CI の記録は `docs/old_ci-build.md`、
+  停止した旧公開手順は `docs/release-workflow.md` を参照してください。
 
 ## コーディングスタイル
 - Java コードは 4 スペースインデント、UTF-8、原則 120 文字以内です。

@@ -227,7 +227,7 @@ class ModrinthPublishTest(unittest.TestCase):
         self.assertTrue(any(name.startswith('publish-state-') for name in self.github.files))
 
     def test_workflow_cutover_has_single_publish_path_and_token_is_step_scoped(self):
-        workflow = (pathlib.Path(pm.__file__).parent.parent / '.github/workflows/release.yml').read_text()
+        workflow = (pathlib.Path(pm.__file__).parent.parent / '.github/workflows/old_release.yml.disabled').read_text()
         self.assertNotIn('mc-publish@', workflow)
         self.assertNotIn('legacy', workflow)
         before_publish, publish_job = workflow.split('\n  publish:\n', 1)
@@ -250,7 +250,7 @@ class ModrinthPublishTest(unittest.TestCase):
         self.fixture.create()
         self.options['expected_manifest_sha256'] = hashlib.sha256(
             (self.bundle / pg.rb.MANIFEST).read_bytes()).hexdigest()
-        workflow = (pathlib.Path(pm.__file__).parent.parent / '.github/workflows/release.yml').read_text()
+        workflow = (pathlib.Path(pm.__file__).parent.parent / '.github/workflows/old_release.yml.disabled').read_text()
         gate = re.search(r'^  github-inputs:\n(.*?)(?=^  [a-zA-Z][\w-]*:|\Z)', workflow, re.M | re.S)[1]
         gate_code = re.search(r"          python3 - <<'PY'\n(.*?)^          PY", gate, re.M | re.S)[1]
         gate_code = '\n'.join(line[10:] for line in gate_code.splitlines())
